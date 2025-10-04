@@ -1,0 +1,22 @@
+Bagaimana cara menjaga kualitas jika semua orang bisa menulis?
+
+Ini adalah tantangan yang dihadapi semua platform User-Generated Content (UGC) seperti Wattpad, Medium, atau YouTube. Berikut adalah beberapa strategi yang bisa Anda terapkan:
+
+Sistem Review Editorial (Gerbang Kualitas):
+
+Semua novel yang baru dibuat akan memiliki status DRAFT secara default.
+Penulis bisa menulis semua chapternya, tetapi novel tersebut tidak akan bisa dilihat publik.
+Setelah selesai, penulis menekan tombol "Ajukan untuk Publikasi".
+Tim editorial Anda (atau Anda sendiri di awal) akan mereview novel tersebut. Anda bisa memeriksa kualitas tulisan, kelengkapan, dan apakah novel tersebut memanfaatkan fitur interaktif dengan baik.
+Jika disetujui, tim editorial akan mengubah status novel menjadi PUBLISHED. Baru setelah itu novel akan muncul di halaman utama dan bisa dibaca oleh semua orang.
+Fitur "Verified Author" atau "Author Terpilih":
+
+Semua orang bisa menulis, tetapi hanya penulis yang sudah terverifikasi yang karyanya akan dipromosikan di halaman utama.
+Ini menciptakan dua tingkatan: penulis umum dan penulis unggulan. Pembaca bisa memfilter untuk hanya melihat karya dari penulis unggulan.
+Sistem Rating dan Komentar dari Pembaca:
+
+Biarkan komunitas yang membantu menentukan kualitas. Novel dengan rating tinggi secara alami akan lebih sering muncul.
+Ini juga memberikan feedback langsung kepada penulis untuk perbaikan.
+Rekomendasi untuk Anda:
+
+Saya sangat merekomendasikan Strategi 1 (Sistem Review Editorial). Ini adalah keseimbangan terbaik antara keterbukaan dan kontrol kualitas. Anda tidak perlu mengubah role user. Cukup manfaatkan status pada model Novel yang sudah Anda miliki (DRAFT, PUBLISHED).
