@@ -10,13 +10,30 @@ export async function POST(request: NextRequest) {
     // 1. Verifikasi Sesi Pengguna
     const session = await getServerSession(authOptions);
 
-    if (!session?.user) {
-      return new NextResponse("Unauthorized", { status: 401 });
+    // Pengecekan yang lebih spesifik untuk memastikan user dan ID-nya ada
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { message: "Akses ditolak. Anda harus login untuk membuat novel." },
+        { status: 401 }
+      );
     }
 
     // 2. Parse dan Validasi Body Request
     const body = await request.json();
     const { title, description } = CreateNovelSchema.parse(body);
+
+    // Validasi tambahan: Pastikan user dari sesi benar-benar ada di DB
+    const author = await prisma.user.findUnique({
+      where: { id: session.user.id },
+    });
+
+    if (!author) {
+      // Ini menangani kasus di mana sesi valid tetapi user telah dihapus dari DB.
+      return NextResponse.json(
+        { message: "User tidak ditemukan. Silakan login kembali." },
+        { status: 404 }
+      );
+    }
 
     // 3. Buat Novel di Database
     const newNovel = await prisma.novel.create({
@@ -34,11 +51,17 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     // Tangani error validasi dari Zod
     if (error instanceof z.ZodError) {
-      return new NextResponse(JSON.stringify(error.issues), { status: 422 });
+      return NextResponse.json(
+        { message: "Input tidak valid.", errors: error.issues },
+        { status: 422 }
+      );
     }
 
     // Tangani error umum
     console.error("[NOVELS_POST_ERROR]", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    return NextResponse.json(
+      { message: "Terjadi kesalahan di server. Silakan coba lagi nanti." },
+      { status: 500 }
+    );
   }
 }

@@ -1,57 +1,118 @@
-import { getServerSession } from "next-auth/next";
-import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
-import { Container, Typography, Grid, Button, Box } from "@mui/material";
-import { ArrowBack } from "@mui/icons-material";
-import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
-// Kita akan membuat komponen ini di langkah berikutnya
+"use client";
+
+import { useEffect, useState, use, Fragment } from "react";
+import {
+  Container,
+  Typography,
+  Alert,
+  Skeleton,
+  Breadcrumbs,
+  Link as MuiLink,
+} from "@mui/material";
+import type { Chapter } from "@prisma/client";
+import Link from "next/link"; // Tetap gunakan Link dari next/link
 import ChapterEditorForm from "@/components/chapters/ChapterEditorForm";
 
-interface ChapterEditorPageProps {
+interface EditChapterPageProps {
   params: {
     novelId: string;
     chapterId: string;
   };
 }
 
-export default async function ChapterEditorPage({
-  params,
-}: ChapterEditorPageProps) {
-  const session = await getServerSession(authOptions);
+type ChapterSummary = { id: string; title: string; chapterNumber: number };
 
-  if (!session) {
-    redirect("/auth/login");
+export default function EditChapterPage({ params }: EditChapterPageProps) {
+  // Gunakan React.use() untuk mengakses params dan menghindari warning
+  const { novelId, chapterId } = use(params) as {
+    novelId: string;
+    chapterId: string;
+  };
+  const [error, setError] = useState<string | null>(null);
+  const [chapter, setChapter] = useState<Chapter | null>(null);
+  const [allChapters, setAllChapters] = useState<ChapterSummary[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
+
+  useEffect(() => {
+    const fetchChapterData = async () => {
+      setIsLoadingData(true);
+      try {
+        // Ambil data chapter yang sedang diedit dan daftar semua chapter sekaligus
+        const [chapterRes, allChaptersRes] = await Promise.all([
+          fetch(`/api/novels/${novelId}/chapters/${chapterId}`),
+          fetch(`/api/novels/${novelId}/chapters`),
+        ]);
+
+        if (!chapterRes.ok) {
+          throw new Error(
+            "Chapter tidak ditemukan atau Anda tidak punya akses."
+          );
+        }
+        if (!allChaptersRes.ok) {
+          throw new Error("Gagal memuat daftar chapter.");
+        }
+
+        const chapterData: Chapter = await chapterRes.json();
+        const allChaptersData: ChapterSummary[] = await allChaptersRes.json();
+
+        setChapter(chapterData);
+        setAllChapters(allChaptersData);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+    fetchChapterData();
+  }, [novelId, chapterId]);
+
+  if (isLoadingData) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Skeleton variant="text" width="60%" height={40} />
+        <Skeleton
+          variant="rectangular"
+          width="100%"
+          height={500}
+          sx={{ mt: 2 }}
+        />
+      </Container>
+    );
   }
 
-  const { novelId, chapterId } = params;
-
-  const [novel, chapter] = await Promise.all([
-    prisma.novel.findUnique({
-      where: { id: novelId, authorId: session.user.id },
-    }),
-    prisma.chapter.findUnique({
-      where: { id: chapterId, novelId: novelId, authorId: session.user.id },
-    }),
-  ]);
-
-  if (!novel || !chapter) {
-    notFound();
+  if (error && !chapter) {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Alert severity="error">{error}</Alert>
+      </Container>
+    );
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Box mb={3}>
-        <Button
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
+        <MuiLink
           component={Link}
-          href={`/dashboard/novels/edit/${novel.id}`}
-          startIcon={<ArrowBack />}
+          underline="hover"
+          color="inherit"
+          href={`/dashboard/novels/edit/${novelId}`}
         >
-          {" "}
-          Kembali ke Editor Novel{" "}
-        </Button>{" "}
-      </Box>
-      <ChapterEditorForm novelId={novel.id} chapter={chapter} />
+          Editor Novel
+        </MuiLink>
+        <Typography color="text.primary">
+          Chapter #{chapter?.chapterNumber}
+        </Typography>
+      </Breadcrumbs>
+
+       {chapter && allChapters.length > 0 && (
+        <Fragment>
+          <ChapterEditorForm
+            novelId={novelId}
+            chapter={chapter}
+            allChapters={allChapters}
+          />
+        </Fragment> 
+      )}
     </Container>
   );
 }

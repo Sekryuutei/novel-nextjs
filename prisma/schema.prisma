@@ -111,7 +111,7 @@ model Chapter {
   price         Float?    // Harga chapter individual
   
   // RELASI DASAR
-  novel         Novel     @relation(fields: [novelId], references: [id])
+  novel         Novel     @relation(fields: [novelId], references: [id], onDelete: Cascade)
   novelId       String
   author        User      @relation(fields: [authorId], references: [id])
   authorId      String
@@ -122,7 +122,10 @@ model Chapter {
   choicesAsSource Choice[] @relation("ChoiceChapter")    // Pilihan yang dimulai dari chapter ini
   choicesAsTarget Choice[] @relation("ChoiceNextChapter") // Pilihan yang mengarah ke chapter ini
   nextChapters  Chapter[] @relation("ChapterPath") // Chapter berikutnya (multiple untuk branching)
-  
+  positionX     Float?    @default(0)
+  positionY     Float?    @default(0)
+  choices       Json?     // [{ "text": "Go left", "nextChapterId": "cuid..." }]
+
   // MULTIMEDIA
   backgroundMusic String? // Musik latar spesifik chapter
   customBackground String? // Background spesifik chapter

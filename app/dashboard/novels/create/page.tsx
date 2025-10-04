@@ -43,8 +43,14 @@ export default function CreateNovelPage() {
         });
 
         if (!response.ok) {
-          const result = await response.json();
-          throw new Error(result.error || "Gagal membuat novel baru.");
+          // Coba parse body sebagai JSON. Jika gagal, gunakan text.
+          let errorMessage =
+            "Gagal membuat novel baru. Status: " + response.status;
+          try {
+            const result = await response.json();
+            errorMessage = result.message || JSON.stringify(result);
+          } catch (e) {}
+          throw new Error(errorMessage);
         }
 
         const newNovel: Novel = await response.json();

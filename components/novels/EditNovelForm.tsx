@@ -45,7 +45,7 @@ export default function EditNovelForm({ novel }: EditNovelFormProps) {
     startTransition(async () => {
       try {
         const response = await fetch(`/api/novels/${novel.id}`, {
-          method: "PUT",
+          method: "PATCH",
           headers: {
             "Content-Type": "application/json",
           },
@@ -54,7 +54,7 @@ export default function EditNovelForm({ novel }: EditNovelFormProps) {
 
         if (!response.ok) {
           const result = await response.json();
-          throw new Error(result.error || "Gagal memperbarui novel.");
+          throw new Error(result.message || "Gagal memperbarui novel.");
         }
 
         setSuccess("Novel berhasil diperbarui!");

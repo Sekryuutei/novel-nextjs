@@ -5,116 +5,96 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { UpdateChapterSchema } from "@/lib/validators/chapter";
 
-interface IParams {
+interface RouteContext {
   params: {
     novelId: string;
     chapterId: string;
   };
 }
 
-// GET: Mengambil satu chapter untuk diedit
-export async function GET(request: NextRequest, { params }: IParams) {
+// Handler untuk GET (mengambil detail satu chapter)
+export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    const { chapterId, novelId } = params;
+    const { chapterId } = params; // This is correct.
 
     const chapter = await prisma.chapter.findUnique({
-      where: {
-        id: chapterId,
-        novelId: novelId,
-        authorId: session.user.id, // Pemeriksaan keamanan
-      },
+      where: { id: chapterId },
     });
 
     if (!chapter) {
-      return new NextResponse("Chapter tidak ditemukan", { status: 404 });
+      return NextResponse.json(
+        { message: "Chapter tidak ditemukan" },
+        { status: 404 }
+      );
     }
+
+    // Anda mungkin ingin menambahkan pengecekan akses di sini jika chapter tidak publik
 
     return NextResponse.json(chapter);
   } catch (error) {
     console.error("[CHAPTER_GET_ERROR]", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    return NextResponse.json(
+      { message: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
 
-// PUT: Memperbarui chapter
-export async function PUT(request: NextRequest, { params }: IParams) {
+// Handler untuk PATCH (memperbarui chapter)
+export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
+    // 1. Verifikasi Sesi
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return new NextResponse("Unauthorized", { status: 401 });
+    if (!session?.user?.id) {
+      return NextResponse.json({ message: "Akses ditolak" }, { status: 401 });
     }
 
-    const { chapterId, novelId } = params;
-    const body = await request.json();
-    const data = UpdateChapterSchema.parse(body);
+    // 2. Validasi ID dari URL
+    const { novelId, chapterId } = params; // This is also correct.
 
-    // Verifikasi kepemilikan chapter
-    const chapterOwner = await prisma.chapter.findUnique({
+    // 3. Verifikasi Kepemilikan Chapter
+    const chapterToUpdate = await prisma.chapter.findFirst({
       where: {
         id: chapterId,
         novelId: novelId,
-        authorId: session.user.id,
+        authorId: session.user.id, // Pastikan user yang login adalah pemilik chapter
       },
     });
 
-    if (!chapterOwner) {
-      return new NextResponse("Forbidden", { status: 403 });
+    if (!chapterToUpdate) {
+      return NextResponse.json(
+        { message: "Chapter tidak ditemukan atau Anda tidak punya hak akses." },
+        { status: 404 }
+      );
     }
 
+    // 4. Validasi Body Request
+    const body = await request.json();
+    const parsedData = UpdateChapterSchema.parse(body);
+
+    // 5. Update Chapter di Database
     const updatedChapter = await prisma.chapter.update({
-      where: {
-        id: chapterId,
+      where: { id: chapterId },
+      data: {
+        title: parsedData.title,
+        content: parsedData.content,
+        isPremium: parsedData.isPremium,
+        positionX: parsedData.positionX,
+        positionY: parsedData.positionY,
+        choices: parsedData.choices || [],
       },
-      data,
     });
 
     return NextResponse.json(updatedChapter);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return new NextResponse(JSON.stringify(error.issues), { status: 422 });
-    }
-    console.error("[CHAPTER_PUT_ERROR]", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
-  }
-}
-
-// DELETE: Menghapus chapter
-export async function DELETE(request: NextRequest, { params }: IParams) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return new NextResponse("Unauthorized", { status: 401 });
+      return NextResponse.json({ errors: error.issues }, { status: 422 });
     }
 
-    const { chapterId, novelId } = params;
-
-    // Verifikasi kepemilikan chapter
-    const chapterOwner = await prisma.chapter.findUnique({
-      where: {
-        id: chapterId,
-        novelId: novelId,
-        authorId: session.user.id,
-      },
-    });
-
-    if (!chapterOwner) {
-      return new NextResponse("Forbidden", { status: 403 });
-    }
-
-    await prisma.chapter.delete({
-      where: {
-        id: chapterId,
-      },
-    });
-
-    return new NextResponse(null, { status: 204 });
-  } catch (error) {
-    console.error("[CHAPTER_DELETE_ERROR]", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
+    console.error("[CHAPTER_PATCH_ERROR]", error);
+    return NextResponse.json(
+      { message: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

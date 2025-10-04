@@ -17,7 +17,18 @@ export const UpdateChapterSchema = z.object({
     .optional(),
   content: z.string().optional(),
   isPremium: z.boolean().optional(),
-  price: z.number().optional(),
+  positionX: z.number().optional(),
+  positionY: z.number().optional(),
+  price: z.number().optional().nullable(),
+  choices: z
+    .array(
+      z.object({
+        id: z.string().optional(), // Hanya untuk key di React
+        text: z.string().min(1, { message: "Teks pilihan tidak boleh kosong." }),
+        nextChapterId: z.string().nullable(),
+      })
+    )
+    .optional(),
 });
 
 export type TUpdateChapterSchema = z.infer<typeof UpdateChapterSchema>;

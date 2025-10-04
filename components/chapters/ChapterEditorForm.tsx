@@ -2,8 +2,8 @@
 
 import { Chapter } from "@prisma/client";
 import { useRouter } from "next/navigation";
-import { useState, useTransition, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useState, useTransition } from "react";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   TUpdateChapterSchema,
@@ -19,17 +19,26 @@ import {
   TextField,
   Typography,
   Alert,
+  Grid,
+  IconButton,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
 import TiptapEditor from "@/components/chapters/ChapterEditor";
-import { Grid } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 interface ChapterEditorFormProps {
   novelId: string;
   chapter: Chapter;
+  allChapters: { id: string; title: string; chapterNumber: number }[];
 }
 
 export default function ChapterEditorForm({
   novelId,
   chapter,
+  allChapters,
 }: ChapterEditorFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -37,11 +46,12 @@ export default function ChapterEditorForm({
   const [success, setSuccess] = useState<string | null>(null);
 
   // State terpisah untuk konten dari ReactQuill
-  const [content, setContent] = useState(chapter.content);
+  const [content, setContent] = useState(chapter.content || "");
 
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors, isSubmitting, isDirty },
     watch,
   } = useForm<TUpdateChapterSchema>({
@@ -49,7 +59,13 @@ export default function ChapterEditorForm({
     defaultValues: {
       title: chapter.title,
       isPremium: chapter.isPremium,
+      choices: (chapter.choices as any) || [],
     },
+  });
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "choices",
   });
 
   const isPremium = watch("isPremium");
@@ -69,7 +85,7 @@ export default function ChapterEditorForm({
         const response = await fetch(
           `/api/novels/${novelId}/chapters/${chapter.id}`,
           {
-            method: "PUT",
+            method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           }
@@ -102,14 +118,24 @@ export default function ChapterEditorForm({
         </Alert>
       )}
 
-      <Grid container spacing={4}>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: { xs: "column", md: "row" },
+          gap: 4,
+        }}
+      >
         {/* Kolom Kiri: Editor Konten */}
-        <Grid item xs={12} md={8}>
+        <Box sx={{ flex: { md: 2 }, width: "100%" }}>
+          {" "}
+          {/* flex: 2 means it takes 2/3 of the space */}
           <TiptapEditor content={content} onChange={setContent} />
-        </Grid>
+        </Box>
 
         {/* Kolom Kanan: Pengaturan Chapter */}
-        <Grid item xs={12} md={4}>
+        <Box sx={{ flex: { md: 1 }, width: "100%" }}>
+          {" "}
+          {/* flex: 1 means it takes 1/3 of the space */}
           <Paper elevation={2} sx={{ p: 3 }}>
             <Typography variant="h6" component="h2" gutterBottom>
               Pengaturan Chapter
@@ -136,6 +162,77 @@ export default function ChapterEditorForm({
               label="Chapter Premium"
               sx={{ mt: 1 }}
             />
+            <Typography variant="h6" component="h3" sx={{ mt: 4, mb: 1 }}>
+              Pilihan Cerita
+            </Typography>
+
+            {fields.map((field, index) => (
+              <Paper
+                key={field.id}
+                variant="outlined"
+                sx={{ p: 2, mb: 2, position: "relative" }}
+              >
+                <TextField
+                  fullWidth
+                  label={`Teks Pilihan #${index + 1}`}
+                  {...register(`choices.${index}.text`)}
+                  error={!!errors.choices?.[index]?.text}
+                  helperText={errors.choices?.[index]?.text?.message}
+                  sx={{ mb: 2 }}
+                />
+                <FormControl fullWidth>
+                  <InputLabel id={`next-chapter-label-${index}`}>
+                    Lanjut ke Chapter
+                  </InputLabel>
+                  <Controller
+                    name={`choices.${index}.nextChapterId`}
+                    control={control}
+                    render={({ field: controllerField }) => (
+                      <Select
+                        labelId={`next-chapter-label-${index}`}
+                        label="Lanjut ke Chapter"
+                        {...controllerField}
+                        value={controllerField.value || ""}
+                      >
+                        <MenuItem value="">
+                          <em>Akhiri Cerita di Sini</em>
+                        </MenuItem>
+                        {allChapters
+                          .filter((c) => c.id !== chapter.id)
+                          .map((c) => (
+                            <MenuItem key={c.id} value={c.id}>
+                              #{c.chapterNumber}: {c.title}
+                            </MenuItem>
+                          ))}
+                      </Select>
+                    )}
+                  />
+                </FormControl>
+                <IconButton
+                  aria-label="delete choice"
+                  onClick={() => remove(index)}
+                  sx={{ position: "absolute", top: 8, right: 8 }}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Paper>
+            ))}
+
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<AddIcon />}
+              onClick={() =>
+                append({
+                  text: "",
+                  nextChapterId: null,
+                })
+              }
+              sx={{ mt: 1 }}
+            >
+              Tambah Pilihan
+            </Button>
+
             <Typography
               variant="caption"
               color="text.secondary"
@@ -157,8 +254,8 @@ export default function ChapterEditorForm({
               )}
             </Button>
           </Paper>
-        </Grid>
-      </Grid>
+        </Box>
+      </Box>
     </Box>
   );
 }

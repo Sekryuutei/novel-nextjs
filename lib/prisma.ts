@@ -1,31 +1,19 @@
-// lib/prisma.ts
-import { PrismaClient } from '@prisma/client';
-import { z } from 'zod';
+import { PrismaClient } from "@prisma/client"; // Atau dari '@app/generated/prisma' jika Anda menggunakan output custom
 
-// Define Zod schema for Novel creation
-const NovelCreateInputSchema = z.object({
-  title: z.string().min(1).max(255),
-  description: z.string().max(500).optional(),
-  price: z.number().min(0).optional(),
-});
+declare global {
+  // eslint-disable-next-line no-var
+  var prisma: PrismaClient | undefined;
+}
 
-const prisma = new PrismaClient().$extends({
-  query: {
-    novel: {
-      async create({ args, query }) {
-        // Validate data using Zod
-        args.data = NovelCreateInputSchema.parse(args.data);
-        return query(args);
-      },
-      async update({ args, query }) {
-        // Validate data using Zod
-        if (args.data) {
-          args.data = NovelCreateInputSchema.partial().parse(args.data);
-        }
-        return query(args);
-      },
-    },
-  },
-});
+const prisma =
+  global.prisma ||
+  new PrismaClient({
+    // Optional: log: ["query", "info", "warn", "error"],
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  global.prisma = prisma;
+}
 
 export default prisma;
+

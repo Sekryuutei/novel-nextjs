@@ -6,6 +6,7 @@ import { authOptions } from "@/lib/auth"; // Pastikan path ini benar
 import SessionProvider from "@/components/providers/SessionProvider";
 import ThemeRegistry from "@/components/themeregistry/ThemeRegistry";
 import "./globals.css"; // Impor file CSS global
+import Navbar from "@/components/layout/Navbar";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -32,7 +33,10 @@ export default async function RootLayout({
     <html lang="id">
       <body className={`${inter.className} bg-gray-50 text-gray-900`}>
         <ThemeRegistry options={{ key: "mui" }}>
-          <SessionProvider session={session}>{children}</SessionProvider>
+          <SessionProvider session={session}>
+            <Navbar />
+            <main>{children}</main>
+          </SessionProvider>
         </ThemeRegistry>
       </body>
     </html>
