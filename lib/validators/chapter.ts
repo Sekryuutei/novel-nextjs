@@ -1,0 +1,23 @@
+import { z } from "zod";
+
+export const CreateChapterSchema = z.object({
+  title: z
+    .string()
+    .min(3, { message: "Judul chapter harus memiliki minimal 3 karakter." })
+    .max(100, { message: "Judul chapter tidak boleh lebih dari 100 karakter." }),
+});
+
+export type TCreateChapterSchema = z.infer<typeof CreateChapterSchema>;
+
+export const UpdateChapterSchema = z.object({
+  title: z
+    .string()
+    .min(3, { message: "Judul chapter harus memiliki minimal 3 karakter." })
+    .max(100, { message: "Judul chapter tidak boleh lebih dari 100 karakter." })
+    .optional(),
+  content: z.string().optional(),
+  isPremium: z.boolean().optional(),
+  price: z.number().optional(),
+});
+
+export type TUpdateChapterSchema = z.infer<typeof UpdateChapterSchema>;
