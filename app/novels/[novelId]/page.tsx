@@ -9,6 +9,7 @@ import {
   List,
   ListItem,
   ListItemText,
+  ListItemButton,
   Divider,
   Chip,
   Stack,
@@ -16,7 +17,6 @@ import {
 import Link from "next/link";
 import Image from "next/image";
 import { Book, Person, Star } from "@mui/icons-material";
-import StoryGraphViewer from "@/components/read/StoryGraphViewer";
 
 interface NovelDetailPageProps {
   params: {
@@ -142,33 +142,25 @@ export default async function NovelDetailPage({
 
       <Paper elevation={2} sx={{ mt: 4, p: 3 }}>
         <Typography variant="h5" component="h2" gutterBottom>
-          Peta Cerita
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Klik pada sebuah chapter untuk mulai membaca dari sana.
-        </Typography>
-        <StoryGraphViewer novelId={novel.id} chapters={novel.chapters} />
-      </Paper>
-
-      <Paper elevation={2} sx={{ mt: 4, p: 3 }}>
-        <Typography variant="h5" component="h2" gutterBottom>
           Daftar Chapter
         </Typography>
         <List>
           {novel.chapters.map((chapter, index) => (
-            <ListItem
-              key={chapter.id}
-              component={Link}
+            <Link
               href={`/read/${novel.id}/${chapter.id}`}
-              button
+              passHref
+              key={chapter.id}
+              style={{ textDecoration: "none", color: "inherit" }}
             >
-              <ListItemText
-                primary={`#${chapter.chapterNumber}: ${chapter.title}`}
-              />
-              {chapter.isPremium && (
-                <Chip label="Premium" size="small" color="secondary" />
-              )}
-            </ListItem>
+              <ListItemButton>
+                <ListItemText
+                  primary={`#${chapter.chapterNumber}: ${chapter.title}`}
+                />
+                {chapter.isPremium && (
+                  <Chip label="Premium" size="small" color="secondary" />
+                )}
+              </ListItemButton>
+            </Link>
           ))}
         </List>
       </Paper>

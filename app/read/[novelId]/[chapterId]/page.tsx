@@ -82,16 +82,17 @@ export default async function ReadChapterPage({ params }: ChapterPageProps) {
           <Typography variant="h6" align="center">
             Buat Pilihanmu:
           </Typography>
-          {choices.map((choice, index) => (
-            <Button
-              key={index}
-              component={Link}
+          {choices.map((choice) => (
+            <Link
               href={`/read/${params.novelId}/${choice.nextChapterId}`}
-              variant="contained"
-              size="large"
+              key={choice.id}
+              passHref
+              style={{ textDecoration: "none" }}
             >
-              {choice.text}
-            </Button>
+              <Button variant="contained" size="large" fullWidth>
+                {choice.text}
+              </Button>
+            </Link>
           ))}
         </Box>
       )}

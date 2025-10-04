@@ -201,7 +201,15 @@ export default function StoryMapView({ novelId, chapters }: StoryMapViewProps) {
         await fetch(`/api/novels/${novelId}/chapters/${sourceNodeId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ choices: updatedChoices }),
+          body: JSON.stringify({
+            title: sourceChapter.title,
+            content: sourceChapter.content,
+            isPremium: sourceChapter.isPremium,
+            positionX: sourceChapter.positionX,
+            positionY: sourceChapter.positionY,
+            price: sourceChapter.price,
+            choices: updatedChoices,
+          }),
         });
 
         // 3. Refresh the page to get all data again.
@@ -239,7 +247,15 @@ export default function StoryMapView({ novelId, chapters }: StoryMapViewProps) {
         await fetch(`/api/novels/${novelId}/chapters/${source}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ choices: updatedChoices }),
+          body: JSON.stringify({
+            title: sourceChapter.title,
+            content: sourceChapter.content,
+            isPremium: sourceChapter.isPremium,
+            positionX: sourceChapter.positionX,
+            positionY: sourceChapter.positionY,
+            price: sourceChapter.price,
+            choices: updatedChoices,
+          }),
         });
 
         // Refresh data untuk menampilkan edge baru

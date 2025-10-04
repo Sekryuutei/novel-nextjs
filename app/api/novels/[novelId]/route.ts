@@ -16,10 +16,9 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const { searchParams } = new URL(request.url);
     const includeChapters = searchParams.get("includeChapters") === "true";
-    const { novelId } = params;
 
     const novel = await prisma.novel.findUnique({
-      where: { id: novelId },
+      where: { id: params.novelId },
       include: {
         chapters: includeChapters
           ? {
@@ -59,12 +58,10 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
 
     // 2. Validasi ID Novel dari URL
-    const { novelId } = params;
-
     // 3. Verifikasi Kepemilikan Novel
     const novelToUpdate = await prisma.novel.findFirst({
       where: {
-        id: novelId,
+        id: params.novelId,
         authorId: session.user.id, // Pastikan user yang login adalah pemilik novel
       },
     });
@@ -82,7 +79,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     // 5. Update Novel di Database
     const updatedNovel = await prisma.novel.update({
-      where: { id: novelId },
+      where: { id: params.novelId },
       data: {
         title,
         description,

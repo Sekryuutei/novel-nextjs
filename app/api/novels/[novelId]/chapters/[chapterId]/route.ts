@@ -15,10 +15,8 @@ interface RouteContext {
 // Handler untuk GET (mengambil detail satu chapter)
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
-    const { chapterId } = params; // This is correct.
-
     const chapter = await prisma.chapter.findUnique({
-      where: { id: chapterId },
+      where: { id: params.chapterId },
       include: {
         choicesAsSource: true, // Ambil semua pilihan yang berasal dari chapter ini
       },
@@ -53,13 +51,12 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
 
     // 2. Validasi ID dari URL
-    const { novelId, chapterId } = params; // This is also correct.
 
     // 3. Verifikasi Kepemilikan Chapter
     const chapterToUpdate = await prisma.chapter.findFirst({
       where: {
-        id: chapterId,
-        novelId: novelId,
+        id: params.chapterId,
+        novelId: params.novelId,
         authorId: session.user.id, // Pastikan user yang login adalah pemilik chapter
       },
     });
@@ -77,7 +74,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     // 5. Update Chapter di Database
     const updatedChapter = await prisma.chapter.update({
-      where: { id: chapterId },
+      where: { id: params.chapterId },
       data: {
         title: parsedData.title,
         content: parsedData.content,
@@ -109,6 +106,58 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
 
     console.error("[CHAPTER_PATCH_ERROR]", error);
+    return NextResponse.json(
+      { message: "Internal Server Error" },
+      { status: 500 }
+    );
+  }
+}
+
+// Handler untuk DELETE (menghapus chapter)
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
+  try {
+    // 1. Verifikasi Sesi
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ message: "Akses ditolak" }, { status: 401 });
+    }
+
+    // 2. Validasi ID dari URL
+    const { novelId, chapterId } = params;
+
+    // 3. Verifikasi Kepemilikan Chapter
+    const chapterToDelete = await prisma.chapter.findFirst({
+      where: {
+        id: chapterId,
+        novelId: novelId,
+        authorId: session.user.id,
+      },
+    });
+
+    if (!chapterToDelete) {
+      return NextResponse.json(
+        { message: "Chapter tidak ditemukan atau Anda tidak punya hak akses." },
+        { status: 404 }
+      );
+    }
+
+    // Hapus semua 'Choice' yang menunjuk ke chapter ini terlebih dahulu
+    await prisma.choice.deleteMany({
+      where: {
+        nextChapterId: chapterId,
+      },
+    });
+
+    // 4. Hapus Chapter dari Database
+    // Karena kita punya `onDelete: Cascade` pada relasi Choice,
+    // semua pilihan yang berasal dari chapter ini akan ikut terhapus.
+    await prisma.chapter.delete({
+      where: { id: chapterId },
+    });
+
+    return NextResponse.json({ message: "Chapter berhasil dihapus" });
+  } catch (error) {
+    console.error("[CHAPTER_DELETE_ERROR]", error);
     return NextResponse.json(
       { message: "Internal Server Error" },
       { status: 500 }

@@ -16,7 +16,6 @@ export async function POST(request: NextRequest, { params }: IParams) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { novelId } = params; // This is already correct, no change needed here.
     const body = await request.json();
     // Izinkan positionX dan positionY menjadi opsional
     const parsedBody = CreateChapterSchema.extend({
@@ -28,7 +27,7 @@ export async function POST(request: NextRequest, { params }: IParams) {
     // Verifikasi kepemilikan novel
     const novelOwner = await prisma.novel.findUnique({
       where: {
-        id: novelId,
+        id: params.novelId,
         authorId: session.user.id,
       },
     });
@@ -40,7 +39,7 @@ export async function POST(request: NextRequest, { params }: IParams) {
     // Cari chapter terakhir untuk menentukan chapterNumber berikutnya
     const lastChapter = await prisma.chapter.findFirst({
       where: {
-        novelId: novelId,
+        novelId: params.novelId,
       },
       orderBy: {
         chapterNumber: "desc",
@@ -53,7 +52,7 @@ export async function POST(request: NextRequest, { params }: IParams) {
       data: {
         title,
         chapterNumber: newChapterNumber,
-        novelId: novelId,
+        novelId: params.novelId,
         authorId: session.user.id,
         content: "", // Konten awal kosong
         positionX: positionX,
@@ -74,10 +73,9 @@ export async function POST(request: NextRequest, { params }: IParams) {
 export async function GET(request: NextRequest, { params }: IParams) {
   try {
     // Tidak perlu session untuk GET list, karena bisa dilihat publik
-    const { novelId } = params; // This is also correct.
     const chapters = await prisma.chapter.findMany({
       where: {
-        novelId: novelId,
+        novelId: params.novelId,
       },
       orderBy: {
         chapterNumber: "asc",
