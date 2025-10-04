@@ -59,7 +59,7 @@ export default function ChapterEditorForm({
     defaultValues: {
       title: chapter.title,
       isPremium: chapter.isPremium,
-      choices: (chapter.choices as any) || [],
+      choices: (chapter.choicesAsSource as any) || [],
     },
   });
 

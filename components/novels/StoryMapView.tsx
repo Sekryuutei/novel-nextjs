@@ -80,7 +80,7 @@ export default function StoryMapView({ novelId, chapters }: StoryMapViewProps) {
 
     const initialEdges: Edge[] = [];
     chapters.forEach((chapter) => {
-      const choices = (chapter.choices as any[]) || [];
+      const choices = (chapter.choicesAsSource as any[]) || [];
       choices.forEach((choice, index) => {
         if (choice.nextChapterId) {
           initialEdges.push({
@@ -192,7 +192,7 @@ export default function StoryMapView({ novelId, chapters }: StoryMapViewProps) {
 
         // 2. Update the source chapter to add the new choice
         const sourceChapter = chapters.find((c) => c.id === sourceNodeId);
-        const existingChoices = (sourceChapter?.choices as any[]) || [];
+        const existingChoices = (sourceChapter?.choicesAsSource as any[]) || [];
         const updatedChoices = [
           ...existingChoices,
           { text: newChoiceText, nextChapterId: newChapter.id },
@@ -230,7 +230,7 @@ export default function StoryMapView({ novelId, chapters }: StoryMapViewProps) {
         const sourceChapter = chapters.find((c) => c.id === source);
         if (!sourceChapter) throw new Error("Chapter asal tidak ditemukan.");
 
-        const existingChoices = (sourceChapter.choices as any[]) || [];
+        const existingChoices = (sourceChapter.choicesAsSource as any[]) || [];
         const updatedChoices = [
           ...existingChoices,
           { text: addChoiceText, nextChapterId: target },

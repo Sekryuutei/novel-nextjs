@@ -43,7 +43,7 @@ export default async function Navbar() {
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Button
               component={Link}
-              href="/dashboard/novels"
+              href="/dashboard/"
               variant="outlined"
               size="small"
             >

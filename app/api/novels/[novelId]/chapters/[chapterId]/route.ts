@@ -19,6 +19,9 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
     const chapter = await prisma.chapter.findUnique({
       where: { id: chapterId },
+      include: {
+        choicesAsSource: true, // Ambil semua pilihan yang berasal dari chapter ini
+      },
     });
 
     if (!chapter) {
@@ -81,7 +84,21 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         isPremium: parsedData.isPremium,
         positionX: parsedData.positionX,
         positionY: parsedData.positionY,
-        choices: parsedData.choices || [],
+        // Handle 'choices' update using nested writes on the correct relation field
+        ...(parsedData.choices && {
+          choicesAsSource: {
+            // 1. Hapus semua pilihan yang ada untuk chapter ini
+            deleteMany: {},
+            // 2. Buat kembali semua pilihan dari data yang dikirim
+            create: parsedData.choices
+              .filter((choice) => choice.nextChapterId) // Hanya buat choice yang punya tujuan
+              .map((choice) => ({
+                text: choice.text,
+                // Pastikan nextChapterId tidak null
+                nextChapterId: choice.nextChapterId!,
+              })),
+          },
+        }),
       },
     });
 

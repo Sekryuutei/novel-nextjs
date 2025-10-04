@@ -117,14 +117,12 @@ model Chapter {
   authorId      String
   
   // NARASI BERCABANG (SELF-RELATION)
-  parentChapterId String? // Chapter sebelumnya (untuk linear)
-  parentChapter   Chapter? @relation("ChapterPath", fields: [parentChapterId], references: [id])
-  choicesAsSource Choice[] @relation("ChoiceChapter")    // Pilihan yang dimulai dari chapter ini
-  choicesAsTarget Choice[] @relation("ChoiceNextChapter") // Pilihan yang mengarah ke chapter ini
-  nextChapters  Chapter[] @relation("ChapterPath") // Chapter berikutnya (multiple untuk branching)
-  positionX     Float?    @default(0)
-  positionY     Float?    @default(0)
-  choices       Json?     // [{ "text": "Go left", "nextChapterId": "cuid..." }]
+  // Pilihan yang dimulai dari chapter ini
+  choicesAsSource       Choice[] @relation("ChoiceChapter")
+  // Pilihan dari chapter lain yang mengarah ke chapter ini
+  choicesThatLeadToThis Choice[] @relation("ChoicesAsTarget")
+  positionX             Float?   @default(0)
+  positionY             Float?   @default(0)
 
   // MULTIMEDIA
   backgroundMusic String? // Musik latar spesifik chapter
@@ -146,10 +144,10 @@ model Chapter {
 model Choice {
   id            String    @id @default(cuid())
   text          String    // Teks pilihan: "Masuk gua", "Lari saja"
-  nextChapter   Chapter   @relation("ChoiceNextChapter", fields: [nextChapterId], references: [id])  // Relasi ke chapter tujuan
+  nextChapter   Chapter @relation("ChoicesAsTarget", fields: [nextChapterId], references: [id])
   nextChapterId String    // Chapter tujuan dari pilihan ini
-  chapter       Chapter   @relation("ChoiceChapter", fields: [chapterId], references: [id])   // Relasi ke chapter asal
-  chapterId     String    // Chapter tempat pilihan ini muncul
+  chapter       Chapter @relation("ChoiceChapter", fields: [chapterId], references: [id], onDelete: Cascade)
+  chapterId     String    // Chapter tempat pilihan ini muncul, jika chapter ini dihapus, pilihan juga terhapus
 
   @@map("choices")
 }

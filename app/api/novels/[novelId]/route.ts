@@ -23,6 +23,9 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       include: {
         chapters: includeChapters
           ? {
+              include: {
+                choicesAsSource: true, // Ambil juga pilihan untuk setiap chapter
+              },
               orderBy: { chapterNumber: "asc" },
             }
           : false,
