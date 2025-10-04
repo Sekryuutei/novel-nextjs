@@ -1,15 +1,224 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// prisma/schema.prisma
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
+// ================================
+// 1. KONFIGURASI DATABASE & GENERATOR
+// ================================
 generator client {
   provider = "prisma-client-js"
-  output   = "../app/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ================================
+// 2. ENUM DEFINITIONS
+// ================================
+enum UserRole {
+  READER
+  AUTHOR
+  ADMIN
+}
+
+enum NovelStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  COMPLETED
+}
+
+enum PurchaseStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+// ================================
+// 3. DATA MODELS
+// ================================
+
+// Model User: Inti dari sistem, bisa sebagai pembaca atau penulis
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String?   // Untuk login email/password
+  role          UserRole  @default(READER)
+  bio           String?   // Bio penulis
+  avatar        String?   // URL foto profil
+  
+  // RELASI KE MODEL LAIN
+  authoredNovels Novel[]  @relation("NovelAuthor")
+  chapters      Chapter[]
+  purchases     Purchase[]
+  readingHistory ReadingHistory[]
+  
+  // NEXT-AUTH MODELS (WAJIB)
+  accounts      Account[]
+  sessions      Session[]
+  
+  // TIMESTAMPS
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("users")
+}
+
+// Model Novel: Representasi buku/cerita
+model Novel {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  coverImage    String?
+  genre         String[]  // Genre: ["Fantasy", "Romance", "Mystery"]
+  tags          String[]  // Tags untuk pencarian
+  status        NovelStatus @default(DRAFT)
+  isPremium     Boolean   @default(false)
+  price         Float?    // Harga novel (jika premium)
+  rating        Float?    @default(0) // Rating rata-rata
+  totalChapters Int       @default(0)
+  
+  // RELASI
+  author        User      @relation("NovelAuthor", fields: [authorId], references: [id])
+  authorId      String
+  chapters      Chapter[]
+  purchases     Purchase[]
+  readingHistory ReadingHistory[]
+  
+  // FITUR INTERAKTIF
+  hasBranching  Boolean   @default(false) // Apakah punya alur bercabang
+  backgroundMusic String? // URL musik latar default
+  customBackground String? // URL background custom
+  customFont    String?   // Font custom untuk membaca
+  
+  // TIMESTAMPS
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("novels")
+}
+
+// Model Chapter: Bab individual dalam novel
+model Chapter {
+  id            String    @id @default(cuid())
+  title         String
+  content       String    @db.Text // Konten chapter
+  chapterNumber Int       // Urutan chapter: 1, 2, 3, ...
+  isPremium     Boolean   @default(false) // Apakah chapter berbayar
+  price         Float?    // Harga chapter individual
+  
+  // RELASI DASAR
+  novel         Novel     @relation(fields: [novelId], references: [id])
+  novelId       String
+  author        User      @relation(fields: [authorId], references: [id])
+  authorId      String
+  
+  // NARASI BERCABANG (SELF-RELATION)
+  parentChapterId String? // Chapter sebelumnya (untuk linear)
+  parentChapter   Chapter? @relation("ChapterPath", fields: [parentChapterId], references: [id])
+  choicesAsSource Choice[] @relation("ChoiceChapter")    // Pilihan yang dimulai dari chapter ini
+  choicesAsTarget Choice[] @relation("ChoiceNextChapter") // Pilihan yang mengarah ke chapter ini
+  nextChapters  Chapter[] @relation("ChapterPath") // Chapter berikutnya (multiple untuk branching)
+  
+  // MULTIMEDIA
+  backgroundMusic String? // Musik latar spesifik chapter
+  customBackground String? // Background spesifik chapter
+  soundEffects   String[] // Efek suara: ["thunder.mp3", "door_creak.mp3"]
+  
+  // RELASI LAIN
+  purchases      Purchase[] // Pembelian chapter individual
+  readingHistory ReadingHistory[] // Riwayat baca
+  
+  // TIMESTAMPS
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("chapters")
+}
+
+// Model Choice: Pilihan untuk narasi bercabang
+model Choice {
+  id            String    @id @default(cuid())
+  text          String    // Teks pilihan: "Masuk gua", "Lari saja"
+  nextChapter   Chapter   @relation("ChoiceNextChapter", fields: [nextChapterId], references: [id])  // Relasi ke chapter tujuan
+  nextChapterId String    // Chapter tujuan dari pilihan ini
+  chapter       Chapter   @relation("ChoiceChapter", fields: [chapterId], references: [id])   // Relasi ke chapter asal
+  chapterId     String    // Chapter tempat pilihan ini muncul
+
+  @@map("choices")
+}
+
+// Model ReadingHistory: Melacak progress membaca user
+model ReadingHistory {
+  id            String    @id @default(cuid())
+  user          User      @relation(fields: [userId], references: [id])
+  userId        String
+  chapter       Chapter   @relation(fields: [chapterId], references: [id])
+  chapterId     String
+  novel         Novel     @relation(fields: [novelId], references: [id])
+  novelId       String
+  progress      Float?    @default(0) // Progress baca: 0.0 - 1.0
+  lastReadAt    DateTime  @default(now())
+  
+  @@unique([userId, chapterId]) // Satu user hanya satu riwayat per chapter
+  @@map("reading_histories")
+}
+
+// Model Purchase: Transaksi pembelian
+model Purchase {
+  id            String    @id @default(cuid())
+  status        PurchaseStatus @default(PENDING)
+  amount        Float     // Jumlah pembayaran
+  snapToken     String?   // Token dari Midtrans
+  snapRedirectUrl String? // URL redirect Midtrans
+  
+  // RELASI
+  user          User      @relation(fields: [userId], references: [id])
+  userId        String
+  novel         Novel?    @relation(fields: [novelId], references: [id])
+  novelId       String?   // Bisa beli novel utuh
+  chapter       Chapter?  @relation(fields: [chapterId], references: [id])
+  chapterId     String?   // Atau chapter individual
+  
+  // TIMESTAMPS
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("purchases")
+}
+
+// ================================
+// 4. NEXT-AUTH MODELS (JANGAN DIUBAH)
+// ================================
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
 }

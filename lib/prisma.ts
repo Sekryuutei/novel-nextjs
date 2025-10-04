@@ -1,7 +1,31 @@
-import {PrismaClient} from '@prisma/client';
+// lib/prisma.ts
+import { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 
-const globalForPrisma = global as unknown as { prisma: PrismaClient | undefined };
+// Define Zod schema for Novel creation
+const NovelCreateInputSchema = z.object({
+  title: z.string().min(1).max(255),
+  description: z.string().max(500).optional(),
+  price: z.number().min(0).optional(),
+});
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+const prisma = new PrismaClient().$extends({
+  query: {
+    novel: {
+      async create({ args, query }) {
+        // Validate data using Zod
+        args.data = NovelCreateInputSchema.parse(args.data);
+        return query(args);
+      },
+      async update({ args, query }) {
+        // Validate data using Zod
+        if (args.data) {
+          args.data = NovelCreateInputSchema.partial().parse(args.data);
+        }
+        return query(args);
+      },
+    },
+  },
+});
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+export default prisma;
