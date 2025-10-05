@@ -98,25 +98,30 @@ function StoryMap({ novelId, chapters, onUpdate }: StoryMapViewProps) {
   const connectingNodeId = useRef<string | null>(null);
 
   useEffect(() => {
-    const getElements = () => {
-      const initialNodes: Node<ChapterNodeData>[] = chapters.map((chapter) => ({
-        id: chapter.id,
-        type: "chapter",
-        data: {
-          label: chapter.title,
-          chapterNumber: chapter.chapterNumber,
-          novelId: novelId,
-          chapterId: chapter.id,
-          onUpdate: onUpdate,
-        },
-        position: { x: 0, y: 0 }, // Position will be set by dagre
-      }));
+    const nodesWithoutPosition = chapters.some(
+      (c) => c.positionX === null || c.positionY === null
+    );
 
-      const initialEdges: Edge[] = [];
-      chapters.forEach((chapter) => {
-        // Pastikan choicesAsSource ada dan merupakan array
-        if (!Array.isArray(chapter.choicesAsSource)) return;
+    let initialNodes: Node<ChapterNodeData>[] = chapters.map((chapter) => ({
+      id: chapter.id,
+      type: "chapter",
+      data: {
+        label: chapter.title,
+        chapterNumber: chapter.chapterNumber,
+        novelId: novelId,
+        chapterId: chapter.id,
+        onUpdate: onUpdate,
+      },
+      // Gunakan posisi dari DB jika ada, jika tidak, default ke 0,0
+      position: {
+        x: chapter.positionX ?? 0,
+        y: chapter.positionY ?? 0,
+      },
+    }));
 
+    const initialEdges: Edge[] = [];
+    chapters.forEach((chapter) => {
+      if (Array.isArray(chapter.choicesAsSource)) {
         chapter.choicesAsSource.forEach((choice) => {
           if (choice.nextChapterId) {
             initialEdges.push({
@@ -130,14 +135,19 @@ function StoryMap({ novelId, chapters, onUpdate }: StoryMapViewProps) {
             });
           }
         });
-      });
+      }
+    });
 
-      return getLayoutedElements(initialNodes, initialEdges);
-    };
-
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getElements();
-    setNodes(layoutedNodes);
-    setEdges(layoutedEdges);
+    // Hanya jalankan layout otomatis jika ada node yang belum punya posisi
+    if (nodesWithoutPosition) {
+      const { nodes: layoutedNodes, edges: layoutedEdges } =
+        getLayoutedElements(initialNodes, initialEdges);
+      setNodes(layoutedNodes);
+      setEdges(layoutedEdges);
+    } else {
+      setNodes(initialNodes);
+      setEdges(initialEdges);
+    }
   }, [chapters, novelId, onUpdate, setNodes, setEdges]);
 
   const onConnectStart = useCallback(
