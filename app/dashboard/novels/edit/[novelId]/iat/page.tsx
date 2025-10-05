@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, use, useCallback } from "react";
 import {
   Container,
   Typography,
@@ -10,8 +9,9 @@ import {
   Breadcrumbs,
   Link as MuiLink,
   Paper,
+  Box,
 } from "@mui/material";
-import type { Novel, Chapter } from "@prisma/client";
+import type { Novel } from "@prisma/client";
 import StoryMapView from "@/components/novels/StoryMapView";
 
 interface IATPageProps {
@@ -22,16 +22,18 @@ interface IATPageProps {
 
 export default function IATPage({ params }: IATPageProps) {
   const { novelId } = use(params);
-  const router = useRouter();
   const [novelData, setNovelData] = useState<Novel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
-  const fetchNovel = async () => {
+  const fetchNovel = useCallback(async () => {
     setIsLoadingData(true);
     try {
       // Ambil data novel, termasuk inkScript
-      const response = await fetch(`/api/novels/${novelId}`);
+      // Tambahkan cache-busting untuk memastikan data selalu segar setelah update
+      const response = await fetch(
+        `/api/novels/${novelId}?_=${new Date().getTime()}`
+      );
       if (!response.ok) throw new Error("Gagal memuat data novel.");
       const data = await response.json();
       setNovelData(data);
@@ -40,36 +42,37 @@ export default function IATPage({ params }: IATPageProps) {
     } finally {
       setIsLoadingData(false);
     }
-  };
+  }, [novelId]);
 
   useEffect(() => {
     if (novelId) {
       fetchNovel();
-    } // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [novelId]); // fetchNovel tidak perlu ada di dependency array
+    }
+  }, [novelId, fetchNovel]);
 
   if (isLoadingData) {
     return (
       <Container maxWidth={false} sx={{ py: 4 }}>
         <Skeleton variant="text" width="40%" height={60} />
-        <Skeleton
-          variant="rectangular"
-          width="100%"
-          height="70vh"
-          sx={{ mt: 2 }}
-        />
+        <Skeleton variant="text" width="60%" height={50} sx={{ mb: 2 }} />
+        <Skeleton variant="rectangular" width="100%" height="70vh" />
       </Container>
     );
   }
 
   if (error || !novelData) {
-    return <Alert severity="error">{error || "Gagal memuat data."}</Alert>;
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Alert severity="error">{error || "Gagal memuat data."}</Alert>
+      </Container>
+    );
   }
 
   return (
     <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, md: 4 } }}>
       <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
         <MuiLink
+          component="a" // Gunakan 'a' karena Link dari Next.js akan di-handle oleh StoryMapView
           underline="hover"
           color="inherit"
           href={`/dashboard/novels/edit/${novelId}`}
@@ -78,9 +81,11 @@ export default function IATPage({ params }: IATPageProps) {
         </MuiLink>
         <Typography color="text.primary">Peta Cerita Interaktif</Typography>
       </Breadcrumbs>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Peta Cerita: {novelData.title}
-      </Typography>
+      <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+        <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
+          Peta Cerita: {novelData.title}
+        </Typography>
+      </Box>
       <Paper
         elevation={3}
         sx={{
@@ -91,7 +96,8 @@ export default function IATPage({ params }: IATPageProps) {
       >
         <StoryMapView
           novelId={novelData.id}
-          initialInkScript={novelData.inkScript}
+          initialInkScript={novelData.inkScript || ""}
+          onUpdate={fetchNovel} // Pass fungsi fetchNovel untuk re-fetch data
         />
       </Paper>
     </Container>

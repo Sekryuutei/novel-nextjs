@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, memo } from "react";
 import ReactFlow, { // prettier-ignore
   addEdge,
   Background,
@@ -27,17 +27,18 @@ import {
 import { v4 as uuidv4 } from "uuid";
 import dagre from "dagre";
 
-import InkNode from "@/components/iat/InkNode";
+import InkNode from "@/components/iat/InkNode"; // Pastikan path ini benar
 import EditableEdge from "@/components/iat/EditableEdge";
 
 import "reactflow/dist/style.css";
 
 interface StoryMapProps {
   novelId: string;
-  initialInkScript: string | null;
+  initialInkScript: string;
+  onUpdate?: () => void;
 }
 
-const nodeTypes = { ink: InkNode };
+const nodeTypes: NodeTypes = { ink: InkNode }; // Hapus memo di sini, karena InkNode sudah di-memoize secara internal
 const edgeTypes = { default: EditableEdge }; // Gunakan edge baru sebagai default
 
 const dagreGraph = new dagre.graphlib.Graph();
@@ -73,38 +74,37 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
 
 // Fungsi untuk mengubah skrip Ink menjadi state visual (nodes, edges)
 const parseInkScriptToElements = (
-  inkScript: string
+  inkScript: string,
+  onChange: (nodeId: string, data: any) => void
 ): { nodes: Node[]; edges: Edge[] } => {
   if (!inkScript) return { nodes: [], edges: [] };
 
   const nodes: Node[] = [];
   const edges: Edge[] = [];
-  const knotRegex = /===\s*(\w+)\s*===([\s\S]*?)(?===|$)/g;
+  const knotRegex = /===\s*([a-zA-Z0-9_]+)\s*===([\s\S]*?)(?=(?:===|$))/g;
   let match;
 
   while ((match = knotRegex.exec(inkScript)) !== null) {
     const knotId = match[1]; // Ini adalah ID unik, bukan judul
     const knotContent = match[2];
 
-    // Ekstrak tag visual
-    const tagRegex = /#\s*(\w+):\s*([\w#"',\s-]+)/g;
-    const visualTags: { [key: string]: string } = {};
-    knotContent.replace(
-      tagRegex,
-      (fullMatch, key, value) => ((visualTags[key] = value.trim()), "")
-    );
-
-    const choiceRegex = /\*\s*\[(.*?)\]\s*->\s*(\w+)/g;
-    const endRegex = /->\s*END/g;
-    const contentWithoutChoices = knotContent
+    const choiceRegex = /\*\s*\[(.*?)\]\s*->\s*([a-zA-Z0-9_]+)/g;
+    const allTagsRegex = /^\s*#.*$/gm; // Regex untuk menghapus semua baris tag
+    const tunnelRegex = /->\s*([a-zA-Z0-9_]+)\s*$/gm; // Regex untuk mendeteksi -> KNOT
+    const titleRegex = /^TITLE:\s*(.*)\n/m;
+    const titleMatch = knotContent.match(titleRegex);
+    const title = titleMatch
+      ? titleMatch[1]
+      : knotId.toUpperCase() === "START" // Lebih toleran terhadap penulisan (start vs START)
+      ? "Awal Cerita"
+      : knotId.replace(/_/g, " ");
+    const content = knotContent
+      .replace(titleRegex, "")
       .replace(choiceRegex, "")
-      .replace(endRegex, "")
+      .replace(allTagsRegex, "") // Hapus semua tag dari konten
+      .replace(tunnelRegex, "") // Hapus juga syntax tunnel dari konten
+      .replace(/->\s*END/g, "")
       .trim();
-    const lines = contentWithoutChoices.split("\n");
-    const title =
-      lines.shift()?.replace(/^TITLE:\s*/, "") ||
-      (knotId === "START" ? "Awal Cerita" : knotId.replace(/_/g, " "));
-    const content = lines.join("\n").trim(); // Gabungkan sisa baris sebagai konten
 
     nodes.push({
       id: knotId,
@@ -113,21 +113,36 @@ const parseInkScriptToElements = (
       data: {
         title: title,
         content: content,
-        isStart: knotId === "START",
+        isStart: knotId.toUpperCase() === "START",
+        deletable: knotId.toUpperCase() !== "START", // Node START tidak bisa dihapus
+        onChange: onChange,
         isEnd: knotContent.includes("-> END"),
-        fontFamily: visualTags.fontFamily || null,
-        fontColor: visualTags.fontColor || null,
-        backgroundColor: visualTags.backgroundColor || null,
       },
     });
 
     let choiceMatch;
     while ((choiceMatch = choiceRegex.exec(knotContent)) !== null) {
       edges.push({
-        id: `e-${knotId}-${choiceMatch[2]}-${uuidv4()}`,
+        id: `e-${knotId}-${choiceMatch[2]}-${uuidv4()}`, // uuid untuk key unik
         source: knotId,
         target: choiceMatch[2],
         label: choiceMatch[1],
+      });
+    }
+
+    // Parsing untuk tunnel (-> KNOT)
+    let tunnelMatch;
+    // Reset lastIndex karena kita menggunakan regex global di loop yang berbeda
+    tunnelRegex.lastIndex = 0;
+    while ((tunnelMatch = tunnelRegex.exec(knotContent)) !== null) {
+      // Pastikan ini bukan bagian dari choice
+      if (knotContent.substring(0, tunnelMatch.index).trim().endsWith("]"))
+        continue;
+      edges.push({
+        id: `e-${knotId}-${tunnelMatch[1]}-${uuidv4()}`,
+        source: knotId,
+        target: tunnelMatch[1],
+        label: "", // Tunnel tidak punya label
       });
     }
   }
@@ -137,30 +152,24 @@ const parseInkScriptToElements = (
 
 // Fungsi untuk mengubah state visual (nodes, edges) menjadi skrip Ink
 const generateInkScript = (nodes: Node[], edges: Edge[]): string => {
-  let script = "";
-  // Filter keluar node 'output' (node END) agar tidak ikut di-generate sebagai knot
-  const storyNodes = nodes.filter((node) => node.type !== "output");
+  // Pastikan ada node START, jika tidak, jangan generate apa-apa untuk menghindari error
+  const hasStartNode = nodes.some((node) => node.id.toUpperCase() === "START");
+  if (!hasStartNode) return ""; // Kembalikan string kosong jika tidak ada START node
+
+  let script = "-> START\n\n"; // Selalu mulai dari START yang valid
+  const storyNodes = nodes.filter((node) => node.type === "ink");
 
   storyNodes.forEach((node) => {
     // Gunakan ID node sebagai nama knot, karena dijamin unik.
     script += `=== ${node.id} ===\n`;
     // Simpan judul sebagai baris pertama konten untuk parsing kembali
-    script += `TITLE: ${node.data.title || "Tanpa Judul"}\n\n`; // Tambah baris baru setelah judul
+    script += `TITLE: ${node.data.title || "Tanpa Judul"}\n`;
 
     // Tambahkan tag visual jika ada dan bukan nilai default
-    if (node.data.fontFamily && node.data.fontFamily !== "Inter") {
-      script += `# fontFamily: ${node.data.fontFamily}\n`;
-    }
-    if (node.data.fontColor && node.data.fontColor !== "#000000") {
-      script += `# fontColor: ${node.data.fontColor}\n`;
-    }
-    if (node.data.backgroundColor && node.data.backgroundColor !== "#FFFFFF") {
-      script += `# backgroundColor: ${node.data.backgroundColor}\n`;
-    }
+    // WAJIB: Tambahkan tag nama knot untuk identifikasi di backend
+    script += `# knot: ${node.id}\n`;
 
-    script += `${
-      node.data.content?.replace(/\n*->\s*END\s*/g, "").trim() || ""
-    }\n\n`; // Tambah baris baru setelah konten, pastikan -> END lama bersih
+    script += `\n${node.data.content || ""}\n\n`;
 
     const outgoingEdges = edges.filter((edge) => edge.source === node.id);
     if (outgoingEdges.length > 0) {
@@ -170,7 +179,11 @@ const generateInkScript = (nodes: Node[], edges: Edge[]): string => {
           script += `-> END\n`;
         } else {
           // Arahkan ke ID node target, yang juga merupakan nama knot-nya.
-          script += `* [${edge.label || "Lanjutkan"}] -> ${edge.target}\n`;
+          if (edge.label) {
+            script += `* [${edge.label}] -> ${edge.target}\n`;
+          } else {
+            script += `-> ${edge.target}\n`; // Ini adalah tunnel
+          }
         }
       });
     } else if (node.data.isEnd) {
@@ -182,22 +195,39 @@ const generateInkScript = (nodes: Node[], edges: Edge[]): string => {
   return script;
 };
 
-function StoryMap({ novelId, initialInkScript }: StoryMapProps) {
+function StoryMap({ novelId, initialInkScript, onUpdate }: StoryMapProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { screenToFlowPosition } = useReactFlow();
-  const { fitView } = useReactFlow(); // Ambil fungsi fitView
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const { getNodes, getEdges, deleteElements } = useReactFlow();
+  const { getNodes, getEdges, deleteElements, fitView, screenToFlowPosition } =
+    useReactFlow();
+
+  const handleNodeDataChange = useCallback(
+    (nodeId: string, data: { isEnd?: boolean; [key: string]: any }) => {
+      setNodes((nds) => {
+        const newNodes = nds.map((n) => {
+          if (n.id === nodeId) {
+            // Buat objek node baru untuk memicu render
+            return { ...n, data: { ...n.data, ...data } };
+          }
+          return n;
+        });
+        // Hanya update jika ada perubahan untuk menghindari loop
+        if (JSON.stringify(newNodes) !== JSON.stringify(nds)) return newNodes;
+        return nds;
+      });
+    },
+    [setNodes]
+  );
 
   useEffect(() => {
     if (initialInkScript) {
       // Jika ada skrip, parse dan layout
       const { nodes: parsedNodes, edges: parsedEdges } =
-        parseInkScriptToElements(initialInkScript);
+        parseInkScriptToElements(initialInkScript, handleNodeDataChange);
 
       // Tambahkan callback onChange ke setiap elemen yang di-parse
       parsedNodes.forEach(
@@ -216,7 +246,7 @@ function StoryMap({ novelId, initialInkScript }: StoryMapProps) {
       // Gunakan ID yang bisa diprediksi untuk node awal
       setNodes([
         {
-          id: "START", // Gunakan ID yang bisa diprediksi
+          id: "START", // WAJIB: ID harus "START"
           type: "ink",
           position: { x: 100, y: 100 },
           deletable: false, // Node Awal tidak bisa dihapus
@@ -231,19 +261,7 @@ function StoryMap({ novelId, initialInkScript }: StoryMapProps) {
       ]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialInkScript, setNodes, setEdges, fitView]); // Tambahkan dependensi
-
-  const handleNodeDataChange = useCallback(
-    (nodeId: string, data: { isEnd?: boolean; [key: string]: any }) => {
-      // Logika umum untuk semua perubahan data node
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
-        )
-      );
-    },
-    [setNodes]
-  );
+  }, [initialInkScript]); // Hanya bergantung pada skrip awal
 
   const onNodesChangeWithData = useCallback(
     (changes: NodeChange[]) => {
@@ -279,7 +297,7 @@ function StoryMap({ novelId, initialInkScript }: StoryMapProps) {
       const newEdge = {
         ...params,
         id: uuidv4(),
-        label: "Teks Pilihan", // Default label
+        label: "", // Default sekarang adalah linear (tanpa label)
         data: { onChange: handleEdgeDataChange }, // Kirim callback ke edge
       };
       setEdges((eds) => addEdge(newEdge, eds));
@@ -326,6 +344,16 @@ function StoryMap({ novelId, initialInkScript }: StoryMapProps) {
     setNodes((nds) => nds.concat(newNode));
   };
 
+  const onLayout = useCallback(() => {
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+      getNodes(),
+      getEdges()
+    );
+    setNodes([...layoutedNodes]);
+    setEdges([...layoutedEdges]);
+    window.requestAnimationFrame(() => fitView({ duration: 300 }));
+  }, [getNodes, getEdges, setNodes, setEdges, fitView]);
+
   const handleSaveStory = async () => {
     setIsPending(true);
     setError(null);
@@ -344,6 +372,7 @@ function StoryMap({ novelId, initialInkScript }: StoryMapProps) {
       if (!res.ok) throw new Error(data.message || "Gagal menyimpan cerita.");
 
       setSuccess(data.message);
+      if (onUpdate) onUpdate();
     } catch (error) {
       setError((error as Error).message);
     } finally {
@@ -364,8 +393,8 @@ function StoryMap({ novelId, initialInkScript }: StoryMapProps) {
         <Button variant="outlined" onClick={addNode}>
           Tambah Chapter
         </Button>
-        <Button variant="outlined" onClick={() => fitView({ duration: 300 })}>
-          Paskan ke Layar
+        <Button variant="outlined" onClick={onLayout}>
+          Rapikan Layout
         </Button>
         <Button
           color="error"
@@ -400,7 +429,7 @@ function StoryMap({ novelId, initialInkScript }: StoryMapProps) {
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes} // Terapkan edgeTypes
+        edgeTypes={edgeTypes}
         style={{ height: "100%", width: "100%" }}
       >
         <Background />

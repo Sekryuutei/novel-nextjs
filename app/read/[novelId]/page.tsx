@@ -20,27 +20,37 @@ interface Choice {
   tags: string[];
 }
 
+interface StoryState {
+  storyText: string;
+  choices: Choice[];
+  isEnd: boolean;
+  // Kita bisa tambahkan data lain di sini jika perlu, misal: tags chapter
+}
+
 // Tipe data novel yang kita butuhkan untuk styling
-type NovelDataForRead = Pick<
-  Novel,
-  "id" | "title" | "fontFamily" | "fontColor" | "backgroundColor"
->;
+type NovelDataForRead = Pick<Novel, "id" | "title">;
 
 export default function ReadPage({ params }: { params: { novelId: string } }) {
-  const { novelId } = params;
+  const { novelId } = use(params);
   const [novelData, setNovelData] = useState<NovelDataForRead | null>(null);
-  const [storyText, setStoryText] = useState("");
-  const [choices, setChoices] = useState<Choice[]>([]);
-  const [isEnd, setIsEnd] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdvancing, setIsAdvancing] = useState(false); // State loading khusus untuk pilihan
   const [error, setError] = useState<string | null>(null);
+
+  // State baru untuk mengelola riwayat cerita
+  const [history, setHistory] = useState<StoryState[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(-1);
+
+  // Ambil state saat ini dari riwayat
+  const currentStoryState = history[currentIndex];
 
   const advanceStory = useCallback(
     async (choiceIndex?: number) => {
-      setIsLoading(true);
+      setIsAdvancing(true);
       setError(null);
       try {
-        const res = await fetch(`/api/stories/${novelId}`, {
+        // Ganti endpoint ke /api/read/[novelId]/progress
+        const res = await fetch(`/api/read/${novelId}/progress`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ choiceIndex }),
@@ -54,16 +64,21 @@ export default function ReadPage({ params }: { params: { novelId: string } }) {
         }
 
         const data = await res.json();
-        setStoryText(data.storyText);
-        setChoices(data.choices);
-        setIsEnd(data.isEnd);
+
+        // Logika baru untuk memperbarui riwayat
+        setHistory((prevHistory) => {
+          // Jika pembaca membuat pilihan baru setelah kembali, potong riwayat masa depan
+          const newHistory = prevHistory.slice(0, currentIndex + 1);
+          return [...newHistory, data];
+        });
+        setCurrentIndex((prevIndex) => prevIndex + 1);
       } catch (err: any) {
         setError(err.message);
       } finally {
-        setIsLoading(false);
+        setIsAdvancing(false);
       }
     },
-    [novelId]
+    [novelId, currentIndex]
   );
 
   // 2. Muat data novel dan cerita awal saat komponen pertama kali dimuat
@@ -78,11 +93,11 @@ export default function ReadPage({ params }: { params: { novelId: string } }) {
         const novel: NovelDataForRead = await novelRes.json();
         setNovelData(novel);
 
-        // Memulai cerita awal (tanpa choiceIndex)
-        const storyRes = await fetch(`/api/stories/${novelId}`, {
+        // Memulai cerita awal (tanpa choiceIndex) - Ganti endpoint
+        const storyRes = await fetch(`/api/read/${novelId}/progress`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}), // Body kosong untuk memulai cerita
+          body: JSON.stringify({ reset: true }), // Selalu reset saat pertama kali load halaman
         });
 
         if (!storyRes.ok) {
@@ -91,10 +106,11 @@ export default function ReadPage({ params }: { params: { novelId: string } }) {
         }
 
         const storyData = await storyRes.json();
-        setStoryText(storyData.storyText);
-        setChoices(storyData.choices);
-        setIsEnd(storyData.isEnd);
+        // Inisialisasi riwayat dengan state pertama
+        setHistory([storyData]);
+        setCurrentIndex(0);
       } catch (err: any) {
+        console.error("[FRONTEND_ERROR] Fetch initial data failed:", err);
         setError(err.message);
       } finally {
         setIsLoading(false);
@@ -105,6 +121,18 @@ export default function ReadPage({ params }: { params: { novelId: string } }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novelId]);
 
+  const handlePrevious = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
+    }
+  };
+
+  const handleNext = () => {
+    if (currentIndex < history.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    }
+  };
+
   if (!novelData && !isLoading) {
     return notFound();
   }
@@ -114,10 +142,6 @@ export default function ReadPage({ params }: { params: { novelId: string } }) {
       sx={{
         minHeight: "100vh",
         py: 4,
-        backgroundColor: novelData?.backgroundColor || "#FFFFFF",
-        color: novelData?.fontColor || "#000000",
-        fontFamily: novelData?.fontFamily || "Inter, sans-serif",
-        transition: "background-color 0.3s, color 0.3s",
       }}
     >
       <Container maxWidth="md">
@@ -134,7 +158,7 @@ export default function ReadPage({ params }: { params: { novelId: string } }) {
             fontFamily: "inherit",
           }}
         >
-          {isLoading && !storyText ? ( // Tampilkan loading hanya jika belum ada teks
+          {isLoading ? ( // Tampilkan loading saat data awal dimuat
             <Box
               sx={{
                 display: "flex",
@@ -148,13 +172,23 @@ export default function ReadPage({ params }: { params: { novelId: string } }) {
           ) : error ? (
             <Alert severity="error">{error}</Alert>
           ) : (
-            <Typography sx={{ whiteSpace: "pre-wrap" }}>{storyText}</Typography>
+            currentStoryState && (
+              <Typography
+                component="div"
+                sx={{ whiteSpace: "pre-wrap", lineHeight: 1.7 }}
+                dangerouslySetInnerHTML={{
+                  __html: currentStoryState.storyText,
+                }}
+              />
+            )
           )}
         </Paper>
 
         <Stack spacing={2} sx={{ mt: 4 }}>
-          {!error &&
-            choices.map((choice) => {
+          {!isLoading &&
+            !error &&
+            currentStoryState &&
+            currentStoryState.choices.map((choice) => {
               const isPremium = choice.tags?.includes("premium");
               return (
                 <Button
@@ -162,6 +196,7 @@ export default function ReadPage({ params }: { params: { novelId: string } }) {
                   variant={isPremium ? "outlined" : "contained"}
                   color={isPremium ? "secondary" : "primary"}
                   onClick={() => {
+                    if (isAdvancing) return; // Cegah klik ganda saat loading
                     if (isPremium) {
                       alert(
                         "Ini adalah pilihan premium! Fitur pembelian akan datang."
@@ -170,24 +205,66 @@ export default function ReadPage({ params }: { params: { novelId: string } }) {
                       advanceStory(choice.index);
                     }
                   }}
+                  disabled={isAdvancing}
                 >
-                  {choice.text} {isPremium && "💎"}
+                  {isAdvancing ? <CircularProgress size={24} /> : choice.text}{" "}
+                  {isPremium && "💎"}
                 </Button>
               );
             })}
 
-          {!isLoading && !error && choices.length === 0 && !isEnd && (
-            <Button variant="contained" onClick={() => advanceStory()}>
-              Lanjutkan
-            </Button>
-          )}
-
-          {isEnd && (
+          {currentStoryState?.isEnd && (
             <Typography variant="h6" align="center" color="text.secondary">
               - Tamat -
             </Typography>
           )}
         </Stack>
+
+        {/* Tombol Navigasi Baru */}
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            mt: 4,
+            pt: 2,
+            borderTop: 1,
+            borderColor: "divider",
+          }}
+        >
+          <Button
+            onClick={handlePrevious}
+            disabled={currentIndex <= 0 || isLoading || isAdvancing}
+            fullWidth
+          >
+            &laquo; Kembali
+          </Button>
+          <Button
+            onClick={() => {
+              // Jika kita berada di ujung riwayat, "Selanjutnya" akan memajukan cerita.
+              // Jika tidak, ia hanya akan maju dalam riwayat yang sudah ada.
+              if (currentIndex >= history.length - 1) {
+                advanceStory();
+              } else {
+                handleNext();
+              }
+            }}
+            disabled={
+              (currentIndex >= history.length - 1 &&
+                currentStoryState?.isEnd) ||
+              currentStoryState?.choices.length > 0 || // Nonaktifkan jika ada pilihan
+              isLoading ||
+              isAdvancing
+            }
+            fullWidth
+          >
+            {isAdvancing && currentIndex >= history.length - 1 ? (
+              <CircularProgress size={24} />
+            ) : (
+              "Selanjutnya"
+            )}{" "}
+            &raquo;
+          </Button>
+        </Box>
       </Container>
     </Box>
   );

@@ -23,8 +23,10 @@ import {
   MenuItem,
 } from "@mui/material";
 import SettingsIcon from "@mui/icons-material/Settings";
-import { memo, useState } from "react";
-import { MuiColorInput } from "mui-color-input";
+import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
+import UnfoldLessIcon from "@mui/icons-material/UnfoldLess";
+import { memo, useState, Fragment } from "react";
+import TiptapEditor from "./TiptapEditor"; // Pastikan path ini benar
 
 // Tipe data yang diterima oleh node ini dari StoryMapView
 interface InkNodeData {
@@ -32,29 +34,19 @@ interface InkNodeData {
   content: string;
   isStart: boolean; // Menandakan node awal
   isEnd: boolean; // Menandakan node akhir
-  fontFamily?: string | null;
-  fontColor?: string | null;
-  backgroundColor?: string | null;
   onChange: (
     nodeId: string,
     data: {
       title?: string;
       content?: string;
       isEnd?: boolean;
-      fontFamily?: string | null;
-      fontColor?: string | null;
-      backgroundColor?: string | null;
     }
   ) => void;
 }
 
 function InkNode({ id, data, isConnectable }: NodeProps<InkNodeData>) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [localSettings, setLocalSettings] = useState({
-    fontFamily: data.fontFamily || "Inter",
-    fontColor: data.fontColor || "#000000",
-    backgroundColor: data.backgroundColor || "#FFFFFF",
-  });
+  const [isCollapsed, setIsCollapsed] = useState(true); // Default diciutkan
 
   // Handler untuk perubahan judul
   const handleTitleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,8 +54,8 @@ function InkNode({ id, data, isConnectable }: NodeProps<InkNodeData>) {
   };
 
   // Handler untuk perubahan konten
-  const handleContentChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    data.onChange(id, { content: event.target.value });
+  const handleContentChange = (htmlContent: string) => {
+    data.onChange(id, { content: htmlContent });
   };
 
   const handleIsEndChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,28 +65,6 @@ function InkNode({ id, data, isConnectable }: NodeProps<InkNodeData>) {
       ? `${data.content}\n-> END`
       : data.content.replace(/\n*->\s*END\s*/g, "").trim();
     data.onChange(id, { content: newContent, isEnd: isNowEnd });
-  };
-
-  const handleSettingsChange = (field: string, value: string) => {
-    setLocalSettings((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleSaveSettings = () => {
-    data.onChange(id, {
-      fontFamily: localSettings.fontFamily,
-      fontColor: localSettings.fontColor,
-      backgroundColor: localSettings.backgroundColor,
-    });
-    setSettingsOpen(false);
-  };
-
-  const handleOpenSettings = () => {
-    setLocalSettings({
-      fontFamily: data.fontFamily || "Inter",
-      fontColor: data.fontColor || "#000000",
-      backgroundColor: data.backgroundColor || "#FFFFFF",
-    });
-    setSettingsOpen(true);
   };
 
   return (
@@ -107,8 +77,7 @@ function InkNode({ id, data, isConnectable }: NodeProps<InkNodeData>) {
           ? "2px solid #dc2626"
           : "1px solid #ddd",
         borderRadius: "8px",
-        minWidth: 250, // Lebar minimal
-        maxWidth: 400, // Lebar maksimal
+        width: 300, // Beri lebar tetap untuk konsistensi layout
         backgroundColor: "white",
         transition: "border-color 0.2s ease-in-out",
       }}
@@ -138,29 +107,42 @@ function InkNode({ id, data, isConnectable }: NodeProps<InkNodeData>) {
           {data.isStart && <Chip label="Awal" color="success" size="small" />}
           {data.isEnd && <Chip label="Akhir" color="error" size="small" />}
           <Box sx={{ flexGrow: 1 }} />
-          <IconButton size="small" onClick={handleOpenSettings}>
+          <IconButton size="small" onClick={() => setSettingsOpen(true)}>
             <SettingsIcon fontSize="small" />
+          </IconButton>
+          <IconButton size="small" onClick={() => setIsCollapsed(!isCollapsed)}>
+            {isCollapsed ? (
+              <UnfoldMoreIcon fontSize="small" />
+            ) : (
+              <UnfoldLessIcon fontSize="small" />
+            )}
           </IconButton>
         </Box>
         <Box>
-          <TextField
-            variant="standard"
-            fullWidth
-            placeholder="Judul Chapter"
-            value={data.title}
-            onChange={handleTitleChange}
-            sx={{ mb: 1, fontWeight: "bold" }}
-            InputProps={{ style: { fontWeight: "bold" } }}
-          />
-          <TextField
-            variant="standard"
-            fullWidth
-            multiline
-            maxRows={10} // Batasi agar tidak terlalu panjang
-            placeholder="Tulis konten cerita di sini..."
-            value={data.content}
-            onChange={handleContentChange}
-          />
+          {/* Jadikan TextField judul sebagai handle untuk drag */}
+          <div
+            className="custom-drag-handle"
+            style={{ cursor: "move", borderRadius: "4px" }}
+          >
+            <TextField
+              variant="standard"
+              fullWidth
+              placeholder="Judul Chapter"
+              value={data.title}
+              onChange={handleTitleChange}
+              sx={{ mb: 1 }}
+              InputProps={{
+                disableUnderline: true,
+                style: { fontSize: "1.1rem", fontWeight: "bold" },
+              }}
+            />
+          </div>
+          {!isCollapsed && (
+            <TiptapEditor
+              content={data.content || ""}
+              onChange={handleContentChange}
+            />
+          )}
         </Box>
       </CardContent>
 
@@ -201,55 +183,14 @@ function InkNode({ id, data, isConnectable }: NodeProps<InkNodeData>) {
             Menandai ini sebagai chapter akhir akan menghentikan alur cerita di
             sini. Anda tidak bisa menandai chapter awal sebagai chapter akhir.
           </Typography>
-          <hr style={{ margin: "16px 0" }} />
-          <FormControl fullWidth margin="normal">
-            <InputLabel id="font-family-label">Jenis Font</InputLabel>
-            <Select
-              labelId="font-family-label"
-              value={localSettings.fontFamily}
-              onChange={(e) =>
-                handleSettingsChange("fontFamily", e.target.value)
-              }
-              label="Jenis Font"
-            >
-              <MenuItem value={"Inter"}>Inter (Default)</MenuItem>
-              <MenuItem value={"Roboto"}>Roboto</MenuItem>
-              <MenuItem value={"'Times New Roman', serif"}>
-                Times New Roman
-              </MenuItem>
-              <MenuItem value={"'Georgia', serif"}>Georgia</MenuItem>
-              <MenuItem value={"'Courier New', monospace"}>
-                Courier New
-              </MenuItem>
-            </Select>
-          </FormControl>
-          <MuiColorInput
-            name="fontColor"
-            label="Warna Teks"
-            format="hex"
-            fullWidth
-            margin="normal"
-            value={localSettings.fontColor}
-            onChange={(value) => handleSettingsChange("fontColor", value)}
-          />
-          <MuiColorInput
-            name="backgroundColor"
-            label="Warna Latar"
-            format="hex"
-            fullWidth
-            margin="normal"
-            value={localSettings.backgroundColor}
-            onChange={(value) => handleSettingsChange("backgroundColor", value)}
-          />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSettingsOpen(false)}>Tutup</Button>
           <Button
-            onClick={handleSaveSettings}
+            onClick={() => setSettingsOpen(false)}
             variant="contained"
             color="primary"
           >
-            Simpan
+            Tutup
           </Button>
         </DialogActions>
       </Dialog>
