@@ -33,6 +33,7 @@
     "bcryptjs": "^3.0.2",
     "dagre": "^0.8.5",
     "framer-motion": "^12.23.22",
+    "inkjs": "^2.3.2",
     "midtrans": "^1.0.7",
     "motion": "^12.23.22",
     "next": "15.5.4",

@@ -12,13 +12,7 @@ import {
   Paper,
 } from "@mui/material";
 import type { Novel, Chapter } from "@prisma/client";
-import Link from "next/link";
 import StoryMapView from "@/components/novels/StoryMapView";
-
-type ChapterWithChoices = Chapter & {
-  choicesAsSource: { id: string; text: string; nextChapterId: string }[];
-};
-type NovelWithChapters = Novel & { chapters: ChapterWithChoices[] };
 
 interface IATPageProps {
   params: {
@@ -29,17 +23,15 @@ interface IATPageProps {
 export default function IATPage({ params }: IATPageProps) {
   const { novelId } = use(params);
   const router = useRouter();
-  const [novelData, setNovelData] = useState<NovelWithChapters | null>(null);
+  const [novelData, setNovelData] = useState<Novel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const fetchNovel = async () => {
     setIsLoadingData(true);
     try {
-      // Tambahkan cache-busting query param untuk memastikan data baru selalu diambil.
-      const response = await fetch(
-        `/api/novels/${novelId}?includeChapters=true&_=${new Date().getTime()}`
-      );
+      // Ambil data novel, termasuk inkScript
+      const response = await fetch(`/api/novels/${novelId}`);
       if (!response.ok) throw new Error("Gagal memuat data novel.");
       const data = await response.json();
       setNovelData(data);
@@ -53,7 +45,7 @@ export default function IATPage({ params }: IATPageProps) {
   useEffect(() => {
     if (novelId) {
       fetchNovel();
-    }
+    } // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novelId]); // fetchNovel tidak perlu ada di dependency array
 
   if (isLoadingData) {
@@ -78,7 +70,6 @@ export default function IATPage({ params }: IATPageProps) {
     <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, md: 4 } }}>
       <Breadcrumbs aria-label="breadcrumb" sx={{ mb: 2 }}>
         <MuiLink
-          component={Link}
           underline="hover"
           color="inherit"
           href={`/dashboard/novels/edit/${novelId}`}
@@ -93,15 +84,14 @@ export default function IATPage({ params }: IATPageProps) {
       <Paper
         elevation={3}
         sx={{
-          width: "100%",
-          height: "calc(100vh - 200px)", // Beri tinggi yang lebih besar
-          overflow: "auto", // Aktifkan scroll
+          width: "100%", // Lebar penuh
+          height: "calc(100vh - 220px)", // Sesuaikan tinggi dengan viewport
+          position: "relative",
         }}
       >
         <StoryMapView
           novelId={novelData.id}
-          chapters={novelData.chapters}
-          onUpdate={fetchNovel}
+          initialInkScript={novelData.inkScript}
         />
       </Paper>
     </Container>

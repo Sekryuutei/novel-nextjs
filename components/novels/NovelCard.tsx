@@ -157,7 +157,7 @@ export function NovelCard({ novel, showActions = false }: NovelCardProps) {
         {/* Action Buttons */}
         <div className="flex justify-between items-center">
           <Link
-            href={`/novels/${novel.id}`}
+            href={`/read/${novel.id}`}
             className="text-blue-600 hover:text-blue-800 font-medium text-sm"
           >
             Baca Novel →

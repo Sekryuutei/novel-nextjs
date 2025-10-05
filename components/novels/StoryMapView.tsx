@@ -1,8 +1,6 @@
 "use client";
 
-import { Chapter } from "@prisma/client";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ReactFlow, {
   addEdge,
   Background,
@@ -11,47 +9,41 @@ import ReactFlow, {
   Node,
   Edge,
   Connection,
-  MarkerType,
   ReactFlowProvider,
   useNodesState,
   useEdgesState,
   useReactFlow,
+  NodeChange,
+  applyNodeChanges,
 } from "reactflow";
 import {
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  TextField,
   CircularProgress,
+  Box,
+  Typography,
+  Alert,
 } from "@mui/material";
+import { v4 as uuidv4 } from "uuid";
 import dagre from "dagre";
 
-import ChapterNode from "@/components/iat/ChapterNode";
-import CustomEdge from "@/components/iat/CustomEdge";
+import InkNode from "@/components/iat/InkNode";
+import EditableEdge from "@/components/iat/EditableEdge"; // Impor edge baru
 
 import "reactflow/dist/style.css";
 
 interface StoryMapViewProps {
   novelId: string;
-  chapters: Chapter[];
-  onUpdate: () => void;
+  initialInkScript: string | null;
 }
 
-type ChapterNodeData = {
-  label: string;
-  chapterNumber: number;
-  novelId: string;
-  chapterId: string;
-};
+const nodeTypes = { ink: InkNode };
+const edgeTypes = { default: EditableEdge }; // Gunakan edge baru sebagai default
 
 const dagreGraph = new dagre.graphlib.Graph();
 dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-const nodeWidth = 220;
-const nodeHeight = 80;
+const nodeWidth = 250;
+const nodeHeight = 120;
 
 const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   dagreGraph.setGraph({ rankdir: "LR" });
@@ -72,304 +64,288 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
       x: nodeWithPosition.x - nodeWidth / 2,
       y: nodeWithPosition.y - nodeHeight / 2,
     };
-
     return node;
   });
 
   return { nodes, edges };
 };
 
-const nodeTypes = { chapter: ChapterNode };
-const edgeTypes = { custom: CustomEdge };
+// Fungsi untuk mengubah skrip Ink menjadi state visual (nodes, edges)
+const parseInkScriptToElements = (
+  inkScript: string
+): { nodes: Node[]; edges: Edge[] } => {
+  if (!inkScript) return { nodes: [], edges: [] };
 
-function StoryMap({ novelId, chapters, onUpdate }: StoryMapViewProps) {
-  const router = useRouter();
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
+  const knotRegex = /===\s*(\w+)\s*===([\s\S]*?)(?===|$)/g;
+  let match;
+
+  while ((match = knotRegex.exec(inkScript)) !== null) {
+    const knotId = match[1]; // Ini adalah ID unik, bukan judul
+    const knotContent = match[2];
+
+    const choiceRegex = /\*\s*\[(.*?)\]\s*->\s*(\w+)/g;
+    const contentWithoutChoices = knotContent.replace(choiceRegex, "").trim();
+    const lines = contentWithoutChoices.split("\n");
+    const title = lines.shift() || knotId.replace(/_/g, " "); // Ambil baris pertama sebagai judul dan HAPUS dari array
+    const content = lines.join("\n"); // Gabungkan sisa baris sebagai konten
+
+    nodes.push({
+      id: knotId,
+      type: "ink",
+      position: { x: 0, y: 0 }, // Posisi awal, akan di-layout oleh dagre
+      data: {
+        title: title,
+        content: content,
+      },
+    });
+
+    let choiceMatch;
+    while ((choiceMatch = choiceRegex.exec(knotContent)) !== null) {
+      edges.push({
+        id: `e-${knotId}-${choiceMatch[2]}-${uuidv4()}`,
+        source: knotId,
+        target: choiceMatch[2],
+        label: choiceMatch[1],
+      });
+    }
+  }
+
+  return { nodes, edges };
+};
+
+// Fungsi untuk mengubah state visual (nodes, edges) menjadi skrip Ink
+const generateInkScript = (nodes: Node[], edges: Edge[]): string => {
+  let script = "";
+  nodes.forEach((node) => {
+    // Gunakan ID node sebagai nama knot, karena dijamin unik.
+    script += `=== ${node.id} ===\n`;
+    // Simpan judul sebagai baris pertama konten untuk parsing kembali
+    script += `${node.data.title || "Tanpa Judul"}\n`;
+    script += `${node.data.content || ""}\n`;
+
+    const outgoingEdges = edges.filter((edge) => edge.source === node.id);
+    if (outgoingEdges.length > 0) {
+      outgoingEdges.forEach((edge) => {
+        // Arahkan ke ID node target, yang juga merupakan nama knot-nya.
+        script += `* [${edge.label || "Lanjutkan"}] -> ${edge.target}\n`;
+      });
+    } else {
+      script += "-> END\n";
+    }
+    script += "\n";
+  });
+  return script;
+};
+
+function StoryMap({ novelId, initialInkScript }: StoryMapViewProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { screenToFlowPosition } = useReactFlow();
-
-  // State untuk dialog "Buat Chapter Baru"
-  const [newChapterDialog, setNewChapterDialog] = useState<{
-    position: { x: number; y: number };
-  } | null>(null);
-  const [newChapterTitle, setNewChapterTitle] = useState("");
-  const [newChoiceText, setNewChoiceText] = useState("");
-
-  // State untuk dialog "Hubungkan Chapter"
-  const [connectDialog, setConnectDialog] = useState<Connection | null>(null);
-  const [connectChoiceText, setConnectChoiceText] = useState("");
-
   const [isPending, setIsPending] = useState(false);
-  const connectingNodeId = useRef<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const { deleteElements } = useReactFlow();
 
   useEffect(() => {
-    const nodesWithoutPosition = chapters.some(
-      (c) => c.positionX === null || c.positionY === null
-    );
+    if (initialInkScript) {
+      // Jika ada skrip, parse dan layout
+      const { nodes: parsedNodes, edges: parsedEdges } =
+        parseInkScriptToElements(initialInkScript);
 
-    let initialNodes: Node<ChapterNodeData>[] = chapters.map((chapter) => ({
-      id: chapter.id,
-      type: "chapter",
-      data: {
-        label: chapter.title,
-        chapterNumber: chapter.chapterNumber,
-        novelId: novelId,
-        chapterId: chapter.id,
-        onUpdate: onUpdate,
-      },
-      // Gunakan posisi dari DB jika ada, jika tidak, default ke 0,0
-      position: {
-        x: chapter.positionX ?? 0,
-        y: chapter.positionY ?? 0,
-      },
-    }));
+      // Tambahkan callback onChange ke setiap elemen yang di-parse
+      parsedNodes.forEach(
+        (node) => (node.data.onChange = handleNodeDataChange)
+      );
+      parsedEdges.forEach(
+        (edge) => (edge.data = { onChange: handleEdgeDataChange })
+      );
 
-    const initialEdges: Edge[] = [];
-    chapters.forEach((chapter) => {
-      if (Array.isArray(chapter.choicesAsSource)) {
-        chapter.choicesAsSource.forEach((choice) => {
-          if (choice.nextChapterId) {
-            initialEdges.push({
-              id: `e-${choice.id}`,
-              source: chapter.id,
-              target: choice.nextChapterId,
-              type: "custom",
-              markerEnd: { type: MarkerType.ArrowClosed, color: "#6b7280" },
-              data: { label: choice.text },
-              style: { stroke: "#9ca3af" },
-            });
-          }
-        });
-      }
-    });
-
-    // Hanya jalankan layout otomatis jika ada node yang belum punya posisi
-    if (nodesWithoutPosition) {
       const { nodes: layoutedNodes, edges: layoutedEdges } =
-        getLayoutedElements(initialNodes, initialEdges);
+        getLayoutedElements(parsedNodes, parsedEdges);
       setNodes(layoutedNodes);
       setEdges(layoutedEdges);
-    } else {
-      setNodes(initialNodes);
-      setEdges(initialEdges);
+    } else if (nodes.length === 0) {
+      // Jika tidak ada skrip dan tidak ada node, buat node awal
+      // Gunakan ID yang bisa diprediksi untuk node awal
+      setNodes([
+        {
+          id: "Awal_Cerita", // Gunakan ID yang bisa diprediksi
+          type: "ink",
+          position: { x: 100, y: 100 },
+          data: {
+            title: "Awal Cerita",
+            content: "Tulis konten awal di sini...",
+            onChange: handleNodeDataChange,
+          },
+        },
+      ]);
     }
-  }, [chapters, novelId, onUpdate, setNodes, setEdges]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialInkScript]); // Hanya jalankan saat skrip awal berubah
 
-  const onConnectStart = useCallback(
-    (_: any, { nodeId }: { nodeId: string | null }) => {
-      connectingNodeId.current = nodeId;
+  const handleNodeDataChange = useCallback(
+    (nodeId: string, data: any) => {
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === nodeId) {
+            return { ...node, data: { ...node.data, ...data } };
+          }
+          return node;
+        })
+      );
     },
-    []
+    [setNodes]
   );
 
-  const onConnectEnd = useCallback(
-    (event: MouseEvent | TouchEvent) => {
-      if (!connectingNodeId.current) return;
+  const onNodesChangeWithData = useCallback(
+    (changes: NodeChange[]) => {
+      setNodes((nds) => {
+        const nextNodes = applyNodeChanges(changes, nds);
+        // Pastikan fungsi onChange di-pass ke node baru
+        return nextNodes.map((n) => ({
+          ...n,
+          data: { ...n.data, onChange: handleNodeDataChange },
+        }));
+      });
+    },
+    [setNodes, handleNodeDataChange]
+  );
 
-      const targetIsPane = (event.target as HTMLElement).classList.contains(
-        "react-flow__pane"
+  const handleEdgeDataChange = useCallback(
+    (edgeId: string, data: { label: string }) => {
+      setEdges((eds) =>
+        eds.map((edge) => {
+          if (edge.id === edgeId) {
+            // React Flow menyimpan label di root object, bukan di data
+            return { ...edge, label: data.label };
+          }
+          return edge;
+        })
       );
+    },
+    [setEdges]
+  );
 
-      if (targetIsPane) {
-        const position = screenToFlowPosition({
-          x: (event as MouseEvent).clientX,
-          y: (event as MouseEvent).clientY,
-        });
-        setNewChapterDialog({ position });
-        setNewChapterTitle("");
-        setNewChoiceText("");
+  const onConnect = useCallback(
+    (params: Connection) => {
+      const newEdge = {
+        ...params,
+        id: uuidv4(),
+        label: "Teks Pilihan", // Default label
+        data: { onChange: handleEdgeDataChange }, // Kirim callback ke edge
+      };
+      setEdges((eds) => addEdge(newEdge, eds));
+    },
+    [setEdges, handleEdgeDataChange]
+  );
+
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key === "Backspace" || event.key === "Delete") {
+        deleteElements({ nodes, edges });
       }
     },
-    [screenToFlowPosition]
+    [deleteElements, nodes, edges]
   );
 
-  const onConnect = useCallback((params: Connection) => {
-    if (params.source === params.target) return;
-    setConnectDialog(params);
-    setConnectChoiceText("");
-  }, []);
-
-  const handleCloseDialog = () => {
-    setNewChapterDialog(null);
-    setConnectDialog(null);
+  const addNode = () => {
+    const newNodeId = `Chapter_${uuidv4().split("-")[0]}`; // Buat ID yang lebih mudah dibaca
+    const newNode: Node = {
+      id: newNodeId,
+      type: "ink",
+      // Tempatkan node baru di tengah viewport saat ini
+      position: screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 3,
+      }),
+      data: {
+        title: "Chapter Baru",
+        content: "",
+        onChange: handleNodeDataChange,
+      },
+    };
+    setNodes((nds) => nds.concat(newNode));
   };
 
-  const handleNewChapterSubmit = async () => {
-    if (!newChapterDialog || !newChapterTitle || !newChoiceText) return;
-
+  const handleSaveStory = async () => {
     setIsPending(true);
+    setError(null);
+    setSuccess(null);
+
+    const inkScript = generateInkScript(nodes, edges);
+
     try {
-      if (!connectingNodeId.current)
-        throw new Error("Node asal tidak ditemukan.");
-
-      await fetch(
-        `/api/novels/${novelId}/chapters/${connectingNodeId.current}/branch`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            newChoiceText: newChoiceText,
-            newChapterTitle: newChapterTitle,
-            positionX: newChapterDialog.position.x,
-            positionY: newChapterDialog.position.y,
-          }),
-        }
-      );
-      onUpdate();
-    } catch (error) {
-      console.error("Gagal membuat chapter baru:", error);
-      alert("Gagal membuat chapter baru.");
-    } finally {
-      setIsPending(false);
-      handleCloseDialog();
-    }
-  };
-
-  const handleConnectSubmit = async () => {
-    if (!connectDialog || !connectChoiceText) return;
-    // Jangan izinkan pilihan tanpa teks untuk koneksi manual
-    if (connectChoiceText.trim() === "") {
-      alert("Teks pilihan tidak boleh kosong.");
-      return;
-    }
-
-    setIsPending(true);
-    try {
-      const { source, target } = connectDialog;
-      if (!source || !target)
-        throw new Error("Chapter asal atau tujuan tidak valid.");
-
-      // Ambil data chapter asal yang terbaru untuk menghindari menimpa perubahan lain
-      const sourceChapterRes = await fetch(
-        `/api/novels/${novelId}/chapters/${source}`
-      );
-      if (!sourceChapterRes.ok)
-        throw new Error("Gagal mengambil data chapter asal.");
-      const sourceChapter = await sourceChapterRes.json();
-
-      await fetch(`/api/novels/${novelId}/chapters/${source}`, {
+      const res = await fetch(`/api/novels/${novelId}/ink`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...sourceChapter,
-          choices: [
-            ...(sourceChapter.choicesAsSource || []),
-            { text: connectChoiceText, nextChapterId: target },
-          ],
-        }),
+        body: JSON.stringify({ inkScript }),
       });
-      onUpdate(); // Memicu refresh data di halaman IAT
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Gagal menyimpan cerita.");
+
+      setSuccess(data.message);
     } catch (error) {
-      console.error("Gagal menyimpan perubahan:", error);
-      alert("Gagal menyimpan perubahan. Lihat konsol untuk detail.");
+      setError((error as Error).message);
     } finally {
       setIsPending(false);
-      handleCloseDialog();
     }
   };
-
-  const onNodeDragStop = useCallback(
-    (_: any, node: Node) => {
-      const chapterToUpdate = chapters.find((c) => c.id === node.id);
-      if (!chapterToUpdate) return;
-
-      fetch(`/api/novels/${novelId}/chapters/${node.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        // Only send the fields that are being updated
-        body: JSON.stringify({
-          positionX: node.position.x,
-          positionY: node.position.y,
-        }),
-      });
-    },
-    [novelId, chapters]
-  );
 
   return (
     <>
-      <div style={{ width: "100%", height: "100%" }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onConnectStart={onConnectStart}
-          onConnectEnd={onConnectEnd}
-          onNodeDragStop={onNodeDragStop}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          fitView
+      <Box sx={{ p: 2, display: "flex", gap: 2, alignItems: "center" }}>
+        <Button
+          variant="contained"
+          onClick={handleSaveStory}
+          disabled={isPending}
         >
-          <Background />
-          <Controls />
-          <MiniMap />
-        </ReactFlow>
-      </div>
-
-      {/* Dialog untuk membuat chapter baru */}
-      <Dialog open={!!newChapterDialog} onClose={handleCloseDialog}>
-        <DialogTitle>Buat Chapter & Pilihan Baru</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Buat sebuah chapter baru dan pilihan yang mengarah ke sana.
-          </DialogContentText>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Teks Pilihan"
-            placeholder="Contoh: Pergi ke hutan"
-            fullWidth
-            variant="standard"
-            value={newChoiceText}
-            onChange={(e) => setNewChoiceText(e.target.value)}
-          />
-          <TextField
-            margin="dense"
-            label="Judul Chapter Baru"
-            placeholder="Contoh: Hutan Terlarang"
-            fullWidth
-            variant="standard"
-            value={newChapterTitle}
-            onChange={(e) => setNewChapterTitle(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Batal</Button>
-          <Button
-            onClick={handleNewChapterSubmit}
-            disabled={isPending || !newChapterTitle}
-          >
-            {isPending ? <CircularProgress size={24} /> : "Buat"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Dialog untuk menghubungkan chapter */}
-      <Dialog open={!!connectDialog} onClose={handleCloseDialog}>
-        <DialogTitle>Hubungkan Chapter</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Buat sebuah pilihan untuk menghubungkan kedua chapter ini.
-          </DialogContentText>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Teks Pilihan"
-            fullWidth
-            variant="standard"
-            value={connectChoiceText}
-            onChange={(e) => setConnectChoiceText(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Batal</Button>
-          <Button onClick={handleConnectSubmit} disabled={isPending}>
-            {isPending ? <CircularProgress size={24} /> : "Simpan"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+          {isPending ? <CircularProgress size={24} /> : "Simpan Cerita"}
+        </Button>
+        <Button variant="outlined" onClick={addNode}>
+          Tambah Chapter
+        </Button>
+        <Button
+          color="error"
+          variant="text"
+          size="small"
+          onClick={() => deleteElements({ nodes, edges })}
+        >
+          Hapus Pilihan (Tekan Backspace)
+        </Button>
+        <Typography variant="caption">
+          Hubungkan handle node untuk membuat pilihan.
+        </Typography>
+      </Box>
+      {error && (
+        <Alert severity="error" sx={{ m: 2 }}>
+          {error}
+        </Alert>
+      )}
+      {success && (
+        <Alert severity="success" sx={{ m: 2 }}>
+          {success}
+        </Alert>
+      )}
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChangeWithData}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes} // Terapkan edgeTypes
+        onKeyDown={onKeyDown}
+        fitView
+        style={{ height: "100%", width: "100%" }}
+      >
+        <Background />
+        <Controls />
+        <MiniMap />
+      </ReactFlow>
     </>
   );
 }
