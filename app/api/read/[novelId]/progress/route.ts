@@ -46,8 +46,18 @@ export async function POST(request: NextRequest, { params }: ProgressParams) {
       const compiler = new Compiler(novel.inkScript);
       const compiledStory = compiler.Compile();
       if (!compiledStory) throw new Error("Cerita tidak valid atau kosong.");
+      if (compiler.errors.length > 0) {
+        // Jika ada error kompilasi, lempar error dengan detail
+        throw new Error(
+          `Sintaks Ink tidak valid: ${compiler.errors.join(", ")}`
+        );
+      }
       compiledStoryJson = compiledStory.ToJson();
-    } catch (e) {
+    } catch (e: any) {
+      // Tangkap error kompilasi dan kirim respons yang jelas
+      if (e.message.startsWith("Sintaks Ink tidak valid")) {
+        return NextResponse.json({ message: e.message }, { status: 400 }); // Bad Request
+      }
       throw new Error("Gagal meng-compile cerita.");
     }
     const story = new Story(compiledStoryJson);

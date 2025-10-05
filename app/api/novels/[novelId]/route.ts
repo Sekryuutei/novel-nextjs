@@ -17,22 +17,10 @@ export const revalidate = 0;
 // Handler untuk GET (mengambil detail satu novel)
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
-    const { searchParams } = new URL(request.url);
     const { novelId } = await params;
-    const includeChapters = searchParams.get("includeChapters") === "true";
 
     const novel = await prisma.novel.findUnique({
-      where: { id: novelId }, // Tambahkan next: { tags: [...] } di sini
-      include: {
-        chapters: includeChapters
-          ? {
-              include: {
-                choicesAsSource: true, // Ambil juga pilihan untuk setiap chapter
-              },
-              orderBy: { chapterNumber: "asc" },
-            }
-          : false,
-      },
+      where: { id: novelId },
     });
 
     if (!novel) {

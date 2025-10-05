@@ -145,7 +145,6 @@ export function NovelCard({ novel, showActions = false }: NovelCardProps) {
 
         {/* Stats */}
         <div className="flex justify-between items-center text-xs text-gray-500 mb-4">
-          <span>{novel._count?.chapters || 0} Chapter</span>
           <span>{novel._count?.purchases || 0} Pembelian</span>
           {novel.price && (
             <span className="font-semibold text-green-600">

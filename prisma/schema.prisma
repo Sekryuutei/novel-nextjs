@@ -90,9 +90,12 @@ model Novel {
   // FITUR INTERAKTIF
   hasBranching     Boolean @default(false) // Apakah punya alur bercabang
   backgroundMusic  String? // URL musik latar default
-  inkScript        String? @db.Text // Menyimpan seluruh skrip Ink untuk cerita interaktif
-  customBackground String? // URL background custom
-  customFont       String? // Font custom untuk membaca
+  inkScript        String? @db.Text      // Menyimpan seluruh skrip Ink untuk cerita interaktif
+  
+  // PENGATURAN TAMPILAN PEMBACA
+  backgroundColor  String? @default("#FFFFFF") // Warna latar belakang default (putih)
+  fontColor        String? @default("#000000") // Warna font default (hitam)
+  fontFamily       String? @default("Inter")   // Jenis font default
 
   // TIMESTAMPS
   createdAt DateTime @default(now())

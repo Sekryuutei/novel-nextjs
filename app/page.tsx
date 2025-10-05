@@ -8,7 +8,7 @@ import HeroSection from "@/components/landing/HeroSection";
 import { MotionDiv } from "@/components/providers/MotionProvider";
 
 export default async function HomePage() {
-  const [session, featuredNovels, novelCount, purchaseCount, chapterCount] =
+  const [session, featuredNovels, novelCount, purchaseCount] =
     await Promise.all([
       getServerSession(authOptions),
       prisma.novel.findMany({
@@ -20,16 +20,6 @@ export default async function HomePage() {
             select: {
               name: true,
               id: true,
-            },
-          },
-          _count: {
-            select: {
-              chapters: true,
-              purchases: {
-                where: {
-                  status: "SUCCESS",
-                },
-              },
             },
           },
         },
@@ -44,19 +34,11 @@ export default async function HomePage() {
       prisma.purchase.count({
         where: { status: "SUCCESS" },
       }),
-      prisma.chapter.count({
-        where: {
-          novel: {
-            status: "PUBLISHED",
-          },
-        },
-      }),
     ]);
 
   const stats = {
     totalNovels: novelCount,
     totalPurchases: purchaseCount,
-    totalChapters: chapterCount,
   };
 
   return (
@@ -79,12 +61,6 @@ export default async function HomePage() {
                 {stats.totalPurchases}+
               </div>
               <div className="text-gray-600">Pembaca Aktif</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-purple-600 mb-2">
-                {stats.totalChapters}+
-              </div>
-              <div className="text-gray-600">Chapter Tersedia</div>
             </div>
           </div>
         </div>

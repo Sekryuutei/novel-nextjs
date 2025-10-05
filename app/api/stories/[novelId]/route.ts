@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Story } from "inkjs";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { Compiler } from "inkjs/compiler/Compiler";
 
 interface ProgressParams {
   params: {
@@ -39,8 +40,25 @@ export async function POST(request: NextRequest, { params }: ProgressParams) {
       );
     }
 
-    // Compile skrip Ink on-the-fly
-    const story = new Story(novel.inkScript);
+    // Compile skrip Ink mentah menjadi JSON on-the-fly
+    let compiledStoryJson: string;
+    try {
+      const compiler = new Compiler(novel.inkScript);
+      const compiledStory = compiler.Compile();
+      if (!compiledStory) throw new Error("Cerita tidak valid atau kosong.");
+      if (compiler.errors.length > 0) {
+        throw new Error(
+          `Sintaks Ink tidak valid: ${compiler.errors.join(", ")}`
+        );
+      }
+      compiledStoryJson = compiledStory.ToJson();
+    } catch (e: any) {
+      if (e.message.startsWith("Sintaks Ink tidak valid")) {
+        return NextResponse.json({ message: e.message }, { status: 400 });
+      }
+      throw new Error("Gagal meng-compile cerita.");
+    }
+    const story = new Story(compiledStoryJson);
 
     // 3. Muat state cerita sebelumnya jika ada
     if (progress?.inkState) {
@@ -64,6 +82,7 @@ export async function POST(request: NextRequest, { params }: ProgressParams) {
     const availableChoices = story.currentChoices.map((choice) => ({
       text: choice.text,
       index: choice.index,
+      tags: choice.tags,
     }));
 
     // 7. Simpan state BARU ke database
