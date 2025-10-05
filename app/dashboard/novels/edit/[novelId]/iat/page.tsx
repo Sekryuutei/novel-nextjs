@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 import type { Novel, Chapter } from "@prisma/client";
 import Link from "next/link";
-import StoryTreeView from "@/components/novels/StoryTreeView";
+import StoryMapView from "@/components/novels/StoryMapView";
 
 type ChapterWithChoices = Chapter & {
   choicesAsSource: { id: string; text: string; nextChapterId: string }[];
@@ -27,7 +27,7 @@ interface IATPageProps {
 }
 
 export default function IATPage({ params }: IATPageProps) {
-  const { novelId } = use(params) as { novelId: string };
+  const { novelId } = use(params);
   const router = useRouter();
   const [novelData, setNovelData] = useState<NovelWithChapters | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export default function IATPage({ params }: IATPageProps) {
     try {
       // Tambahkan cache-busting query param untuk memastikan data baru selalu diambil
       const response = await fetch(
-        `/api/novels/${novelId}?includeChapters=true&_=${Date.now()}`
+        `/api/novels/${novelId}?includeChapters=true`
       );
       if (!response.ok) throw new Error("Gagal memuat data novel.");
       const data = await response.json();
@@ -54,7 +54,7 @@ export default function IATPage({ params }: IATPageProps) {
     if (novelId) {
       fetchNovel();
     }
-  }, [novelId]);
+  }, [novelId]); // fetchNovel tidak perlu ada di dependency array
 
   if (isLoadingData) {
     return (
@@ -90,11 +90,18 @@ export default function IATPage({ params }: IATPageProps) {
       <Typography variant="h4" component="h1" gutterBottom>
         Peta Cerita: {novelData.title}
       </Typography>
-      <Paper elevation={3} sx={{ overflow: "auto", width: "100%", p: 2 }}>
-        <StoryTreeView
+      <Paper
+        elevation={3}
+        sx={{
+          width: "100%",
+          height: "calc(100vh - 200px)", // Beri tinggi yang lebih besar
+          overflow: "auto", // Aktifkan scroll
+        }}
+      >
+        <StoryMapView
           novelId={novelData.id}
           chapters={novelData.chapters}
-          onUpdate={fetchNovel} // Ganti onUpdate untuk memanggil fetchNovel secara langsung
+          onUpdate={fetchNovel}
         />
       </Paper>
     </Container>

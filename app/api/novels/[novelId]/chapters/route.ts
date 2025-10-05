@@ -11,7 +11,6 @@ interface IParams {
 
 export async function POST(request: NextRequest, { params }: IParams) {
   try {
-    const { novelId } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -24,6 +23,7 @@ export async function POST(request: NextRequest, { params }: IParams) {
       positionY: z.number().optional(),
     }).parse(body);
     const { title, positionX, positionY } = parsedBody;
+    const { novelId } = await params;
 
     // Verifikasi kepemilikan novel
     const novelOwner = await prisma.novel.findUnique({

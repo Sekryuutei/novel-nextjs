@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
@@ -112,6 +113,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       return chapter;
     });
 
+    // Revalidate path untuk IAT agar data selalu segar
+    revalidatePath(`/dashboard/novels/edit/${novelId}/iat`);
+
     return NextResponse.json(updatedChapter);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -165,6 +169,9 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     await prisma.chapter.delete({
       where: { id: chapterId },
     });
+
+    // Revalidate path untuk IAT agar data selalu segar
+    revalidatePath(`/dashboard/novels/edit/${novelId}/iat`);
 
     return NextResponse.json({ message: "Chapter berhasil dihapus" });
   } catch (error) {

@@ -23,11 +23,7 @@ interface EditChapterPageProps {
 type ChapterSummary = { id: string; title: string; chapterNumber: number };
 
 export default function EditChapterPage({ params }: EditChapterPageProps) {
-  // Gunakan React.use() untuk mengakses params dan menghindari warning
-  const { novelId, chapterId } = use(params) as {
-    novelId: string;
-    chapterId: string;
-  };
+  const { novelId, chapterId } = use(params);
   const [error, setError] = useState<string | null>(null);
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [allChapters, setAllChapters] = useState<ChapterSummary[]>([]);
@@ -104,14 +100,15 @@ export default function EditChapterPage({ params }: EditChapterPageProps) {
         </Typography>
       </Breadcrumbs>
 
-       {chapter && allChapters.length > 0 && (
+      {chapter && allChapters.length > 0 && (
         <Fragment>
           <ChapterEditorForm
+            key={chapter.id} // Tambahkan key unik di sini
             novelId={novelId}
             chapter={chapter}
             allChapters={allChapters}
           />
-        </Fragment> 
+        </Fragment>
       )}
     </Container>
   );

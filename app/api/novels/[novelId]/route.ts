@@ -11,6 +11,9 @@ interface RouteContext {
   };
 }
 
+// Nonaktifkan caching untuk route handler ini.
+export const revalidate = 0;
+
 // Handler untuk GET (mengambil detail satu novel)
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
@@ -19,7 +22,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const includeChapters = searchParams.get("includeChapters") === "true";
 
     const novel = await prisma.novel.findUnique({
-      where: { id: novelId },
+      where: { id: novelId }, // Tambahkan next: { tags: [...] } di sini
       include: {
         chapters: includeChapters
           ? {

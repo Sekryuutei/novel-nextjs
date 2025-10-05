@@ -29,7 +29,9 @@
     "@tiptap/pm": "^3.6.5",
     "@tiptap/react": "^3.6.5",
     "@tiptap/starter-kit": "^3.6.5",
+    "@types/dagre": "^0.7.53",
     "bcryptjs": "^3.0.2",
+    "dagre": "^0.8.5",
     "framer-motion": "^12.23.22",
     "midtrans": "^1.0.7",
     "motion": "^12.23.22",
@@ -37,7 +39,7 @@
     "next-auth": "^4.24.7",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-redux": "^9.2.0",
+    "reactflow": "^11.11.4",
     "zod": "^4.1.11"
   },
   "devDependencies": {

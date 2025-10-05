@@ -52,7 +52,7 @@ export default function ChapterEditorForm({
     register,
     handleSubmit,
     control,
-    reset, // Tambahkan reset dari useForm
+    reset,
     formState: { errors, isSubmitting, isDirty },
     watch,
   } = useForm<TUpdateChapterSchema>({
@@ -64,17 +64,6 @@ export default function ChapterEditorForm({
       choices: (chapter.choicesAsSource as any) || [],
     },
   });
-
-  // Efek untuk menyinkronkan form ketika data chapter dari server berubah
-  useEffect(() => {
-    reset({
-      title: chapter.title,
-      isPremium: chapter.isPremium,
-      price: chapter.price ?? 0,
-      choices: (chapter.choicesAsSource as any) || [],
-    });
-    setContent(chapter.content || "");
-  }, [chapter, reset]);
 
   const { fields, append, remove } = useFieldArray({
     control,

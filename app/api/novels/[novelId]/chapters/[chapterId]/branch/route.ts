@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { authOptions } from "@/lib/auth";
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest, { params }: BranchParams) {
       return NextResponse.json({ message: "Akses ditolak." }, { status: 401 });
     }
 
-    const { novelId, chapterId } = params;
+    const { novelId, chapterId } = await params;
 
     // 1. Validate request body
     const body = await request.json();
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest, { params }: BranchParams) {
           title: newChapterTitle,
           chapterNumber: newChapterNumber,
           novelId: novelId,
+          content: "", // Tambahkan konten kosong sebagai default
           authorId: session.user.id,
         },
       });
@@ -74,13 +76,16 @@ export async function POST(request: NextRequest, { params }: BranchParams) {
       await tx.choice.create({
         data: {
           text: newChoiceText,
-          sourceChapterId: chapterId,
+          chapterId: chapterId,
           nextChapterId: newChapter.id,
         },
       });
 
       return newChapter;
     });
+
+    // Revalidate path untuk IAT agar data selalu segar
+    revalidatePath(`/dashboard/novels/edit/${novelId}/iat`);
 
     return NextResponse.json(newChapter, { status: 201 });
   } catch (error) {

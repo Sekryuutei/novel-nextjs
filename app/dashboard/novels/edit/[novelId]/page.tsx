@@ -24,7 +24,7 @@ interface EditNovelPageProps {
   };
 }
 export default function EditNovelPage({ params }: EditNovelPageProps) {
-  const { novelId } = use(params) as { novelId: string };
+  const { novelId } = use(params);
   const [novelData, setNovelData] = useState<NovelWithChapters | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true); // Tetap gunakan ini
@@ -101,10 +101,10 @@ export default function EditNovelPage({ params }: EditNovelPageProps) {
         </Button>
       </div>
       <Grid container spacing={4}>
-        <Grid xs={12} md={5}>
+        <Grid item xs={12} md={5}>
           <EditNovelForm novel={novelData} />
         </Grid>
-        <Grid xs={12} md={7}>
+        <Grid item xs={12} md={7}>
           <ChapterList
             initialChapters={novelData.chapters}
             novelId={novelData.id}
