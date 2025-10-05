@@ -88,12 +88,17 @@ function StoryMap({ novelId, chapters, onUpdate }: StoryMapViewProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const { screenToFlowPosition } = useReactFlow();
 
-  // State untuk dialog
-  const [dialogState, setDialogState] = useState<{
-    type: "new" | "connect";
-    data: any;
+  // State untuk dialog "Buat Chapter Baru"
+  const [newChapterDialog, setNewChapterDialog] = useState<{
+    position: { x: number; y: number };
   } | null>(null);
-  const [inputText, setInputText] = useState("");
+  const [newChapterTitle, setNewChapterTitle] = useState("");
+  const [newChoiceText, setNewChoiceText] = useState("");
+
+  // State untuk dialog "Hubungkan Chapter"
+  const [connectDialog, setConnectDialog] = useState<Connection | null>(null);
+  const [connectChoiceText, setConnectChoiceText] = useState("");
+
   const [isPending, setIsPending] = useState(false);
   const connectingNodeId = useRef<string | null>(null);
 
@@ -170,8 +175,9 @@ function StoryMap({ novelId, chapters, onUpdate }: StoryMapViewProps) {
           x: (event as MouseEvent).clientX,
           y: (event as MouseEvent).clientY,
         });
-        setDialogState({ type: "new", data: { position } });
-        setInputText("");
+        setNewChapterDialog({ position });
+        setNewChapterTitle("");
+        setNewChoiceText("");
       }
     },
     [screenToFlowPosition]
@@ -179,60 +185,79 @@ function StoryMap({ novelId, chapters, onUpdate }: StoryMapViewProps) {
 
   const onConnect = useCallback((params: Connection) => {
     if (params.source === params.target) return;
-    setDialogState({ type: "connect", data: params });
-    setInputText("");
+    setConnectDialog(params);
+    setConnectChoiceText("");
   }, []);
 
   const handleCloseDialog = () => {
-    setDialogState(null);
-    setInputText("");
+    setNewChapterDialog(null);
+    setConnectDialog(null);
   };
 
-  const handleDialogSubmit = async () => {
-    if (!dialogState || !inputText) return;
+  const handleNewChapterSubmit = async () => {
+    if (!newChapterDialog || !newChapterTitle || !newChoiceText) return;
 
     setIsPending(true);
     try {
-      if (dialogState.type === "new") {
-        // Membuat chapter baru dan choice baru
-        if (!connectingNodeId.current)
-          throw new Error("Node asal tidak ditemukan.");
+      if (!connectingNodeId.current)
+        throw new Error("Node asal tidak ditemukan.");
 
-        await fetch(
-          `/api/novels/${novelId}/chapters/${connectingNodeId.current}/branch`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              newChoiceText: inputText,
-              newChapterTitle: `Chapter Baru (dari ${
-                chapters.find((c) => c.id === connectingNodeId.current)?.title
-              })`,
-            }),
-          }
-        );
-      } else if (dialogState.type === "connect") {
-        // Menghubungkan dua chapter yang sudah ada
-        const { source, target } = dialogState.data;
-        if (!source || !target)
-          throw new Error("Chapter asal atau tujuan tidak valid.");
-
-        const sourceChapter = chapters.find((c) => c.id === source);
-        if (!sourceChapter)
-          throw new Error("Data chapter asal tidak ditemukan.");
-
-        const existingChoices = (sourceChapter.choicesAsSource as any[]) || [];
-        const updatedChoices = [
-          ...existingChoices,
-          { text: inputText, nextChapterId: target },
-        ];
-
-        await fetch(`/api/novels/${novelId}/chapters/${source}`, {
-          method: "PATCH",
+      await fetch(
+        `/api/novels/${novelId}/chapters/${connectingNodeId.current}/branch`,
+        {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...sourceChapter, choices: updatedChoices }),
-        });
-      }
+          body: JSON.stringify({
+            newChoiceText: newChoiceText,
+            newChapterTitle: newChapterTitle,
+            positionX: newChapterDialog.position.x,
+            positionY: newChapterDialog.position.y,
+          }),
+        }
+      );
+      onUpdate();
+    } catch (error) {
+      console.error("Gagal membuat chapter baru:", error);
+      alert("Gagal membuat chapter baru.");
+    } finally {
+      setIsPending(false);
+      handleCloseDialog();
+    }
+  };
+
+  const handleConnectSubmit = async () => {
+    if (!connectDialog || !connectChoiceText) return;
+    // Jangan izinkan pilihan tanpa teks untuk koneksi manual
+    if (connectChoiceText.trim() === "") {
+      alert("Teks pilihan tidak boleh kosong.");
+      return;
+    }
+
+    setIsPending(true);
+    try {
+      const { source, target } = connectDialog;
+      if (!source || !target)
+        throw new Error("Chapter asal atau tujuan tidak valid.");
+
+      // Ambil data chapter asal yang terbaru untuk menghindari menimpa perubahan lain
+      const sourceChapterRes = await fetch(
+        `/api/novels/${novelId}/chapters/${source}`
+      );
+      if (!sourceChapterRes.ok)
+        throw new Error("Gagal mengambil data chapter asal.");
+      const sourceChapter = await sourceChapterRes.json();
+
+      await fetch(`/api/novels/${novelId}/chapters/${source}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...sourceChapter,
+          choices: [
+            ...(sourceChapter.choicesAsSource || []),
+            { text: connectChoiceText, nextChapterId: target },
+          ],
+        }),
+      });
       onUpdate(); // Memicu refresh data di halaman IAT
     } catch (error) {
       console.error("Gagal menyimpan perubahan:", error);
@@ -251,8 +276,8 @@ function StoryMap({ novelId, chapters, onUpdate }: StoryMapViewProps) {
       fetch(`/api/novels/${novelId}/chapters/${node.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        // Only send the fields that are being updated
         body: JSON.stringify({
-          ...chapterToUpdate,
           positionX: node.position.x,
           positionY: node.position.y,
         }),
@@ -283,15 +308,50 @@ function StoryMap({ novelId, chapters, onUpdate }: StoryMapViewProps) {
         </ReactFlow>
       </div>
 
-      <Dialog open={!!dialogState} onClose={handleCloseDialog}>
-        <DialogTitle>
-          {dialogState?.type === "new"
-            ? "Buat Chapter & Pilihan Baru"
-            : "Tambah Pilihan ke Chapter"}
-        </DialogTitle>
+      {/* Dialog untuk membuat chapter baru */}
+      <Dialog open={!!newChapterDialog} onClose={handleCloseDialog}>
+        <DialogTitle>Buat Chapter & Pilihan Baru</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Masukkan teks untuk pilihan yang akan mengarah ke chapter ini.
+            Buat sebuah chapter baru dan pilihan yang mengarah ke sana.
+          </DialogContentText>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Teks Pilihan"
+            placeholder="Contoh: Pergi ke hutan"
+            fullWidth
+            variant="standard"
+            value={newChoiceText}
+            onChange={(e) => setNewChoiceText(e.target.value)}
+          />
+          <TextField
+            margin="dense"
+            label="Judul Chapter Baru"
+            placeholder="Contoh: Hutan Terlarang"
+            fullWidth
+            variant="standard"
+            value={newChapterTitle}
+            onChange={(e) => setNewChapterTitle(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Batal</Button>
+          <Button
+            onClick={handleNewChapterSubmit}
+            disabled={isPending || !newChapterTitle}
+          >
+            {isPending ? <CircularProgress size={24} /> : "Buat"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog untuk menghubungkan chapter */}
+      <Dialog open={!!connectDialog} onClose={handleCloseDialog}>
+        <DialogTitle>Hubungkan Chapter</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Buat sebuah pilihan untuk menghubungkan kedua chapter ini.
           </DialogContentText>
           <TextField
             autoFocus
@@ -299,16 +359,13 @@ function StoryMap({ novelId, chapters, onUpdate }: StoryMapViewProps) {
             label="Teks Pilihan"
             fullWidth
             variant="standard"
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            value={connectChoiceText}
+            onChange={(e) => setConnectChoiceText(e.target.value)}
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Batal</Button>
-          <Button
-            onClick={handleDialogSubmit}
-            disabled={isPending || !inputText}
-          >
+          <Button onClick={handleConnectSubmit} disabled={isPending}>
             {isPending ? <CircularProgress size={24} /> : "Simpan"}
           </Button>
         </DialogActions>

@@ -36,9 +36,9 @@ export default function IATPage({ params }: IATPageProps) {
   const fetchNovel = async () => {
     setIsLoadingData(true);
     try {
-      // Tambahkan cache-busting query param untuk memastikan data baru selalu diambil
+      // Tambahkan cache-busting query param untuk memastikan data baru selalu diambil.
       const response = await fetch(
-        `/api/novels/${novelId}?includeChapters=true`
+        `/api/novels/${novelId}?includeChapters=true&_=${new Date().getTime()}`
       );
       if (!response.ok) throw new Error("Gagal memuat data novel.");
       const data = await response.json();

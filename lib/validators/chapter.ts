@@ -26,9 +26,7 @@ export const UpdateChapterSchema = z.object({
     .array(
       z.object({
         id: z.string().optional(), // Hanya untuk key di React
-        text: z
-          .string()
-          .min(1, { message: "Teks pilihan tidak boleh kosong." }),
+        text: z.string().optional(), // Izinkan string kosong atau tidak ada
         nextChapterId: z.string().nullable(),
       })
     )

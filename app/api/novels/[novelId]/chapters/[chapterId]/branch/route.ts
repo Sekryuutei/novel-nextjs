@@ -7,8 +7,10 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 
 const branchSchema = z.object({
-  newChoiceText: z.string().min(1, "Teks pilihan tidak boleh kosong."),
+  newChoiceText: z.string().optional(),
   newChapterTitle: z.string().min(1, "Judul chapter baru tidak boleh kosong."),
+  positionX: z.number().optional(),
+  positionY: z.number().optional(),
 });
 
 interface BranchParams {
@@ -29,7 +31,8 @@ export async function POST(request: NextRequest, { params }: BranchParams) {
 
     // 1. Validate request body
     const body = await request.json();
-    const { newChoiceText, newChapterTitle } = branchSchema.parse(body);
+    const { newChoiceText, newChapterTitle, positionX, positionY } =
+      branchSchema.parse(body);
 
     // 2. Verify ownership of the novel
     const novel = await prisma.novel.findFirst({
@@ -69,13 +72,15 @@ export async function POST(request: NextRequest, { params }: BranchParams) {
           novelId: novelId,
           content: "", // Tambahkan konten kosong sebagai default
           authorId: session.user.id,
+          positionX: positionX,
+          positionY: positionY,
         },
       });
 
       // c. Buat choice baru yang menghubungkan chapter asal ke chapter baru
       await tx.choice.create({
         data: {
-          text: newChoiceText,
+          text: newChoiceText || "", // Gunakan string kosong jika tidak ada input
           chapterId: chapterId,
           nextChapterId: newChapter.id,
         },

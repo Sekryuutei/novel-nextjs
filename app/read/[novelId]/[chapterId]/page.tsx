@@ -1,5 +1,7 @@
-import prisma from "@/lib/prisma";
-import { notFound } from "next/navigation";
+"use client";
+
+import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import {
   Container,
   Typography,
@@ -8,46 +10,104 @@ import {
   Button,
   Breadcrumbs,
   Link as MuiLink,
+  Skeleton,
+  Alert,
+  Stack,
 } from "@mui/material";
 import Link from "next/link";
+import type { Chapter, Novel } from "@prisma/client";
+import { ArrowBack, ArrowForward } from "@mui/icons-material";
 
-interface ChapterPageProps {
+type ChapterWithNovel = Chapter & {
+  novel: { title: string };
+  choicesAsSource: { id: string; text: string; nextChapterId: string }[];
+};
+
+interface ReadingProgress {
+  path: string[];
+  currentChapterId: string;
+}
+
+interface ReadChapterPageProps {
   params: {
     novelId: string;
     chapterId: string;
   };
 }
 
-async function getChapter(novelId: string, chapterId: string) {
-  const chapter = await prisma.chapter.findUnique({
-    where: {
-      id: chapterId,
-      novelId: novelId,
-    },
-    include: {
-      novel: {
-        select: {
-          title: true,
-        },
-      },
-      choicesAsSource: {
-        // Ambil data pilihan dari relasi
-        orderBy: { id: "asc" }, // Urutkan pilihan jika perlu
-      },
-    },
-  });
-  return chapter;
-}
+export default function ReadChapterPage({ params }: ReadChapterPageProps) {
+  const { novelId, chapterId } = use(params);
+  const router = useRouter();
 
-export default async function ReadChapterPage({ params }: ChapterPageProps) {
-  const chapter = await getChapter(params.novelId, params.chapterId);
+  const [chapter, setChapter] = useState<ChapterWithNovel | null>(null);
+  const [progress, setProgress] = useState<ReadingProgress | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  if (!chapter) {
-    notFound();
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        // 1. Update dan ambil progres membaca
+        const progressRes = await fetch("/api/read/progress", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ novelId, chapterId }),
+        });
+        if (!progressRes.ok) throw new Error("Gagal memuat progres membaca.");
+        const progressData: ReadingProgress = await progressRes.json();
+        setProgress(progressData);
+
+        // 2. Ambil data chapter saat ini
+        const chapterRes = await fetch(
+          `/api/novels/${novelId}/chapters/${chapterId}`
+        );
+        if (!chapterRes.ok) throw new Error("Gagal memuat data chapter.");
+        const chapterData: ChapterWithNovel = await chapterRes.json();
+        setChapter(chapterData);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [novelId, chapterId]);
+
+  const handleNavigate = (targetChapterId: string) => {
+    router.push(`/read/${novelId}/${targetChapterId}`);
+  };
+
+  const previousChapterId =
+    progress && progress.path.length > 1
+      ? progress.path[progress.path.indexOf(chapterId) - 1]
+      : null;
+
+  if (isLoading) {
+    return (
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Skeleton variant="text" width="40%" height={30} />
+        <Skeleton variant="text" width="80%" height={60} sx={{ mt: 2 }} />
+        <Skeleton
+          variant="rectangular"
+          width="100%"
+          height={400}
+          sx={{ mt: 4 }}
+        />
+      </Container>
+    );
   }
 
-  // Pilihan cerita disimpan sebagai JSON, jadi kita perlu parse
-  const choices = chapter.choicesAsSource || [];
+  if (error) {
+    return <Alert severity="error">{error}</Alert>;
+  }
+
+  if (!chapter) {
+    return <Alert severity="info">Chapter tidak ditemukan.</Alert>;
+  }
+
+  const choices = chapter.choicesAsSource;
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
@@ -74,28 +134,54 @@ export default async function ReadChapterPage({ params }: ChapterPageProps) {
         elevation={2}
         sx={{ p: { xs: 2, sm: 4 }, mt: 2, lineHeight: 1.8, fontSize: "1.1rem" }}
       >
-        <div dangerouslySetInnerHTML={{ __html: chapter.content }} />
+        <div dangerouslySetInnerHTML={{ __html: chapter.content || "" }} />
       </Paper>
 
-      {choices.length > 0 && (
-        <Box sx={{ mt: 5, display: "flex", flexDirection: "column", gap: 2 }}>
-          <Typography variant="h6" align="center">
-            Buat Pilihanmu:
-          </Typography>
-          {choices.map((choice) => (
-            <Link
-              href={`/read/${params.novelId}/${choice.nextChapterId}`}
-              key={choice.id}
-              passHref
-              style={{ textDecoration: "none" }}
-            >
-              <Button variant="contained" size="large" fullWidth>
-                {choice.text}
+      <Box sx={{ mt: 4 }}>
+        {/* Tombol Pilihan (jika ada) */}
+        {choices.length > 0 && (
+          <Stack spacing={2} sx={{ mb: 4 }}>
+            {choices.length > 1 && (
+              <Typography variant="h6" align="center">
+                Buat Pilihanmu:
+              </Typography>
+            )}
+            {choices.map((choice) => (
+              <Button
+                key={choice.id}
+                variant="contained"
+                size="large"
+                fullWidth
+                onClick={() => handleNavigate(choice.nextChapterId)}
+              >
+                {choice.text || "Lanjutkan Cerita"}
               </Button>
-            </Link>
-          ))}
-        </Box>
-      )}
+            ))}
+          </Stack>
+        )}
+
+        {/* Tombol Navigasi Kembali/Selanjutnya */}
+        <Stack
+          direction="row"
+          spacing={2}
+          justifyContent={previousChapterId ? "space-between" : "flex-end"}
+        >
+          {previousChapterId && (
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBack />}
+              onClick={() => handleNavigate(previousChapterId)}
+            >
+              Kembali
+            </Button>
+          )}
+          {choices.length === 0 && (
+            <Typography variant="h6" align="center" color="text.secondary">
+              - Tamat -
+            </Typography>
+          )}
+        </Stack>
+      </Box>
     </Container>
   );
 }

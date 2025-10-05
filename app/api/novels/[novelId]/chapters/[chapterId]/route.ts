@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
@@ -21,6 +21,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       where: { id: chapterId },
       include: {
         choicesAsSource: true, // Ambil semua pilihan yang berasal dari chapter ini
+        novel: true, // Tambahkan ini untuk menyertakan data novel
       },
     });
 
@@ -90,7 +91,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
           data: parsedData.choices
             .filter((c) => c.text && c.nextChapterId) // Pastikan data valid
             .map((choice) => ({
-              text: choice.text,
+              text: choice.text || "",
               chapterId: chapterId,
               nextChapterId: choice.nextChapterId!,
             })),
@@ -115,6 +116,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     // Revalidate path untuk IAT agar data selalu segar
     revalidatePath(`/dashboard/novels/edit/${novelId}/iat`);
+
+    // Revalidate path untuk halaman baca publik
+    revalidatePath(`/read/${novelId}/${chapterId}`);
 
     return NextResponse.json(updatedChapter);
   } catch (error) {
