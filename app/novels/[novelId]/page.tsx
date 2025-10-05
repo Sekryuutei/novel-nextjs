@@ -7,10 +7,8 @@ import {
   Box,
   Button,
   List,
-  ListItem,
   ListItemText,
   ListItemButton,
-  Divider,
   Chip,
   Stack,
 } from "@mui/material";
@@ -59,7 +57,7 @@ async function getNovelDetails(novelId: string) {
 export default async function NovelDetailPage({
   params,
 }: NovelDetailPageProps) {
-  const { novelId } = params;
+  const { novelId } = await params;
   const novel = await getNovelDetails(novelId);
 
   if (!novel) {
@@ -145,7 +143,7 @@ export default async function NovelDetailPage({
           Daftar Chapter
         </Typography>
         <List>
-          {novel.chapters.map((chapter, index) => (
+          {novel.chapters.map((chapter) => (
             <Link
               href={`/read/${novel.id}/${chapter.id}`}
               passHref

@@ -15,8 +15,9 @@ interface RouteContext {
 // Handler untuk GET (mengambil detail satu chapter)
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
+    const { chapterId } = await params;
     const chapter = await prisma.chapter.findUnique({
-      where: { id: params.chapterId },
+      where: { id: chapterId },
       include: {
         choicesAsSource: true, // Ambil semua pilihan yang berasal dari chapter ini
       },
@@ -44,6 +45,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 // Handler untuk PATCH (memperbarui chapter)
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
+    const { novelId, chapterId } = await params;
     // 1. Verifikasi Sesi
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -55,8 +57,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     // 3. Verifikasi Kepemilikan Chapter
     const chapterToUpdate = await prisma.chapter.findFirst({
       where: {
-        id: params.chapterId,
-        novelId: params.novelId,
+        id: chapterId,
+        novelId: novelId,
         authorId: session.user.id, // Pastikan user yang login adalah pemilik chapter
       },
     });
@@ -72,31 +74,42 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const body = await request.json();
     const parsedData = UpdateChapterSchema.parse(body);
 
-    // 5. Update Chapter di Database
-    const updatedChapter = await prisma.chapter.update({
-      where: { id: params.chapterId },
-      data: {
-        title: parsedData.title,
-        content: parsedData.content,
-        isPremium: parsedData.isPremium,
-        positionX: parsedData.positionX,
-        positionY: parsedData.positionY,
-        // Handle 'choices' update using nested writes on the correct relation field
-        ...(parsedData.choices && {
-          choicesAsSource: {
-            // 1. Hapus semua pilihan yang ada untuk chapter ini
-            deleteMany: {},
-            // 2. Buat kembali semua pilihan dari data yang dikirim
-            create: parsedData.choices
-              .filter((choice) => choice.nextChapterId) // Hanya buat choice yang punya tujuan
-              .map((choice) => ({
-                text: choice.text,
-                // Pastikan nextChapterId tidak null
-                nextChapterId: choice.nextChapterId!,
-              })),
-          },
-        }),
-      },
+    // 5. Lakukan pembaruan dalam satu transaksi untuk memastikan konsistensi data
+    const updatedChapter = await prisma.$transaction(async (tx) => {
+      // a. Hapus semua pilihan (choices) yang ada dari chapter ini
+      await tx.choice.deleteMany({
+        where: {
+          chapterId: chapterId,
+        },
+      });
+
+      // b. Buat ulang pilihan berdasarkan data baru
+      if (parsedData.choices && parsedData.choices.length > 0) {
+        await tx.choice.createMany({
+          data: parsedData.choices
+            .filter((c) => c.text && c.nextChapterId) // Pastikan data valid
+            .map((choice) => ({
+              text: choice.text,
+              chapterId: chapterId,
+              nextChapterId: choice.nextChapterId!,
+            })),
+        });
+      }
+
+      // c. Update data chapter itu sendiri
+      const chapter = await tx.chapter.update({
+        where: { id: chapterId },
+        data: {
+          title: parsedData.title,
+          content: parsedData.content,
+          isPremium: parsedData.isPremium,
+          price: parsedData.price,
+          positionX: parsedData.positionX,
+          positionY: parsedData.positionY,
+        },
+      });
+
+      return chapter;
     });
 
     return NextResponse.json(updatedChapter);
@@ -116,14 +129,12 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 // Handler untuk DELETE (menghapus chapter)
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
+    const { novelId, chapterId } = await params;
     // 1. Verifikasi Sesi
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
       return NextResponse.json({ message: "Akses ditolak" }, { status: 401 });
     }
-
-    // 2. Validasi ID dari URL
-    const { novelId, chapterId } = params;
 
     // 3. Verifikasi Kepemilikan Chapter
     const chapterToDelete = await prisma.chapter.findFirst({

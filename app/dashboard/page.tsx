@@ -21,6 +21,11 @@ export default async function DashboardPage() {
       _count: {
         select: { chapters: true },
       },
+      author: {
+        select: {
+          name: true,
+        },
+      },
     },
     orderBy: {
       createdAt: "desc",
@@ -53,8 +58,6 @@ export default async function DashboardPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {" "}
-        {/* This div was missing its closing tag */}
         <div className="bg-white p-6 rounded-lg border border-gray-200">
           <h3 className="text-lg font-semibold text-gray-700">Total Novel</h3>
           <p className="text-3xl font-bold text-gray-900">

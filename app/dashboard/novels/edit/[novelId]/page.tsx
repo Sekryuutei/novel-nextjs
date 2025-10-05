@@ -8,15 +8,13 @@ import {
   Typography,
   Alert,
   Skeleton,
-  Box,
-  Tabs,
-  Tab,
+  Grid,
+  Button,
 } from "@mui/material";
 import type { Novel, Chapter } from "@prisma/client";
 import EditNovelForm from "@/components/novels/EditNovelForm";
 import ChapterList from "@/components/chapters/ChapterList";
-import StoryMapView from "@/components/novels/StoryMapView";
-import { ReactFlowProvider } from "reactflow";
+import Link from "next/link";
 
 type NovelWithChapters = Novel & { chapters: Chapter[] };
 
@@ -27,11 +25,9 @@ interface EditNovelPageProps {
 }
 export default function EditNovelPage({ params }: EditNovelPageProps) {
   const { novelId } = use(params) as { novelId: string };
-  // const router = useRouter(); // Tidak digunakan, bisa dihapus
   const [novelData, setNovelData] = useState<NovelWithChapters | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoadingData, setIsLoadingData] = useState(true);
-  const [currentTab, setCurrentTab] = useState(0);
+  const [isLoadingData, setIsLoadingData] = useState(true); // Tetap gunakan ini
 
   // Fetch data novel saat komponen dimuat
   useEffect(() => {
@@ -65,21 +61,15 @@ export default function EditNovelPage({ params }: EditNovelPageProps) {
   if (isLoadingData) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Skeleton variant="text" width="40%" height={60} sx={{ mb: 4 }} />
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: { xs: "column", md: "row" },
-            gap: 4,
-          }}
-        >
-          <Box sx={{ flex: { md: 5 }, width: "100%" }}>
+        <Skeleton variant="text" width="60%" height={60} sx={{ mb: 2 }} />
+        <Grid container spacing={4}>
+          <Grid item xs={12} md={5}>
             <Skeleton variant="rectangular" width="100%" height={400} />
-          </Box>
-          <Box sx={{ flex: { md: 7 }, width: "100%" }}>
+          </Grid>
+          <Grid item xs={12} md={7}>
             <Skeleton variant="rectangular" width="100%" height={400} />
-          </Box>
-        </Box>
+          </Grid>
+        </Grid>
       </Container>
     );
   }
@@ -98,54 +88,29 @@ export default function EditNovelPage({ params }: EditNovelPageProps) {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Interactive Authoring Tool
-      </Typography>
-      <Box
-        sx={{
-          display: "flex",
-          flexDirection: { xs: "column", md: "row" },
-          gap: 2,
-        }}
-      >
-        <Box sx={{ flex: { md: 5 }, width: "100%" }}>
-          <EditNovelForm novel={novelData} />
-        </Box>
-        <Box
-          sx={{
-            flex: { md: 7 },
-            width: "100%",
-            display: "flex",
-            flexDirection: "column",
-          }}
+      <div className="flex justify-between items-center mb-4">
+        <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 0 }}>
+          Editor Novel: <span className="font-semibold">{novelData.title}</span>
+        </Typography>
+        <Button
+          component={Link}
+          href={`/dashboard/novels/edit/${novelId}/iat`}
+          variant="outlined"
         >
-          <Paper elevation={2}>
-            <Tabs
-              value={currentTab}
-              onChange={(_, newValue) => setCurrentTab(newValue)}
-              aria-label="Tampilan Chapter"
-              variant="fullWidth"
-            >
-              <Tab label="Daftar Chapter" />
-              <Tab label="Peta Cerita" />
-            </Tabs>
-            {currentTab === 0 && (
-              <ChapterList
-                initialChapters={novelData.chapters}
-                novelId={novelData.id}
-              />
-            )}
-            {currentTab === 1 && (
-              <ReactFlowProvider>
-                <StoryMapView
-                  novelId={novelData.id}
-                  chapters={novelData.chapters}
-                />
-              </ReactFlowProvider>
-            )}
-          </Paper>
-        </Box>
-      </Box>
+          Buka Peta Cerita
+        </Button>
+      </div>
+      <Grid container spacing={4}>
+        <Grid xs={12} md={5}>
+          <EditNovelForm novel={novelData} />
+        </Grid>
+        <Grid xs={12} md={7}>
+          <ChapterList
+            initialChapters={novelData.chapters}
+            novelId={novelData.id}
+          />
+        </Grid>
+      </Grid>
     </Container>
   );
 }

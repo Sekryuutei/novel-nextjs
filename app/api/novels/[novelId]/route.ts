@@ -15,10 +15,11 @@ interface RouteContext {
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const { searchParams } = new URL(request.url);
+    const { novelId } = await params;
     const includeChapters = searchParams.get("includeChapters") === "true";
 
     const novel = await prisma.novel.findUnique({
-      where: { id: params.novelId },
+      where: { id: novelId },
       include: {
         chapters: includeChapters
           ? {
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 // Handler untuk PATCH (memperbarui novel)
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
+    const { novelId } = await params;
     // 1. Verifikasi Sesi
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) {
@@ -61,7 +63,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     // 3. Verifikasi Kepemilikan Novel
     const novelToUpdate = await prisma.novel.findFirst({
       where: {
-        id: params.novelId,
+        id: novelId,
         authorId: session.user.id, // Pastikan user yang login adalah pemilik novel
       },
     });
@@ -79,7 +81,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
     // 5. Update Novel di Database
     const updatedNovel = await prisma.novel.update({
-      where: { id: params.novelId },
+      where: { id: novelId },
       data: {
         title,
         description,

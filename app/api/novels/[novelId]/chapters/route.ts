@@ -11,6 +11,7 @@ interface IParams {
 
 export async function POST(request: NextRequest, { params }: IParams) {
   try {
+    const { novelId } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest, { params }: IParams) {
     // Verifikasi kepemilikan novel
     const novelOwner = await prisma.novel.findUnique({
       where: {
-        id: params.novelId,
+        id: novelId,
         authorId: session.user.id,
       },
     });
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest, { params }: IParams) {
     // Cari chapter terakhir untuk menentukan chapterNumber berikutnya
     const lastChapter = await prisma.chapter.findFirst({
       where: {
-        novelId: params.novelId,
+        novelId: novelId,
       },
       orderBy: {
         chapterNumber: "desc",
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest, { params }: IParams) {
       data: {
         title,
         chapterNumber: newChapterNumber,
-        novelId: params.novelId,
+        novelId: novelId,
         authorId: session.user.id,
         content: "", // Konten awal kosong
         positionX: positionX,
@@ -72,10 +73,11 @@ export async function POST(request: NextRequest, { params }: IParams) {
 
 export async function GET(request: NextRequest, { params }: IParams) {
   try {
+    const { novelId } = await params;
     // Tidak perlu session untuk GET list, karena bisa dilihat publik
     const chapters = await prisma.chapter.findMany({
       where: {
-        novelId: params.novelId,
+        novelId: novelId,
       },
       orderBy: {
         chapterNumber: "asc",

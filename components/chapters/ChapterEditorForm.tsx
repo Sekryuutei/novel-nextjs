@@ -2,7 +2,7 @@
 
 import { Chapter } from "@prisma/client";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -52,6 +52,7 @@ export default function ChapterEditorForm({
     register,
     handleSubmit,
     control,
+    reset, // Tambahkan reset dari useForm
     formState: { errors, isSubmitting, isDirty },
     watch,
   } = useForm<TUpdateChapterSchema>({
@@ -59,9 +60,21 @@ export default function ChapterEditorForm({
     defaultValues: {
       title: chapter.title,
       isPremium: chapter.isPremium,
+      price: chapter.price ?? 0,
       choices: (chapter.choicesAsSource as any) || [],
     },
   });
+
+  // Efek untuk menyinkronkan form ketika data chapter dari server berubah
+  useEffect(() => {
+    reset({
+      title: chapter.title,
+      isPremium: chapter.isPremium,
+      price: chapter.price ?? 0,
+      choices: (chapter.choicesAsSource as any) || [],
+    });
+    setContent(chapter.content || "");
+  }, [chapter, reset]);
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -118,24 +131,21 @@ export default function ChapterEditorForm({
         </Alert>
       )}
 
-      <Box
+      <Grid
+        container
+        spacing={4}
         sx={{
           display: "flex",
           flexDirection: { xs: "column", md: "row" },
-          gap: 4,
         }}
       >
         {/* Kolom Kiri: Editor Konten */}
-        <Box sx={{ flex: { md: 2 }, width: "100%" }}>
-          {" "}
-          {/* flex: 2 means it takes 2/3 of the space */}
+        <Grid item xs={12} md={8}>
           <TiptapEditor content={content} onChange={setContent} />
-        </Box>
+        </Grid>
 
         {/* Kolom Kanan: Pengaturan Chapter */}
-        <Box sx={{ flex: { md: 1 }, width: "100%" }}>
-          {" "}
-          {/* flex: 1 means it takes 1/3 of the space */}
+        <Grid item xs={12} md={4}>
           <Paper elevation={2} sx={{ p: 3 }}>
             <Typography variant="h6" component="h2" gutterBottom>
               Pengaturan Chapter
@@ -162,6 +172,18 @@ export default function ChapterEditorForm({
               label="Chapter Premium"
               sx={{ mt: 1 }}
             />
+            {isPremium && (
+              <TextField
+                margin="normal"
+                fullWidth
+                type="number"
+                label="Harga Chapter (Rp)"
+                disabled={isLoading}
+                {...register("price", { valueAsNumber: true })}
+                error={!!errors.price}
+                helperText={errors.price?.message}
+              />
+            )}
             <Typography variant="h6" component="h3" sx={{ mt: 4, mb: 1 }}>
               Pilihan Cerita
             </Typography>
@@ -225,7 +247,7 @@ export default function ChapterEditorForm({
               onClick={() =>
                 append({
                   text: "",
-                  nextChapterId: null,
+                  nextChapterId: "",
                 })
               }
               sx={{ mt: 1 }}
@@ -254,8 +276,8 @@ export default function ChapterEditorForm({
               )}
             </Button>
           </Paper>
-        </Box>
-      </Box>
+        </Grid>
+      </Grid>
     </Box>
   );
 }
