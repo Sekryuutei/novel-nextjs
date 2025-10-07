@@ -53,6 +53,7 @@ model User {
 
   // RELASI KE MODEL LAIN
   authoredNovels  Novel[]           @relation("NovelAuthor")
+  chapters        Chapter[] // Seorang penulis bisa memiliki banyak chapter
   purchases       Purchase[]
   readingProgress ReadingProgress[]
 
@@ -84,24 +85,65 @@ model Novel {
   // RELASI
   author          User              @relation("NovelAuthor", fields: [authorId], references: [id])
   authorId        String
+  chapters        Chapter[]
   purchases       Purchase[]
   readingProgress ReadingProgress[]
 
   // FITUR INTERAKTIF
-  hasBranching     Boolean @default(false) // Apakah punya alur bercabang
-  backgroundMusic  String? // URL musik latar default
-  inkScript        String? @db.Text      // Menyimpan seluruh skrip Ink untuk cerita interaktif
-  
-  // PENGATURAN TAMPILAN PEMBACA
-  backgroundColor  String? @default("#FFFFFF") // Warna latar belakang default (putih)
-  fontColor        String? @default("#000000") // Warna font default (hitam)
-  fontFamily       String? @default("Inter")   // Jenis font default
+  hasBranching    Boolean @default(false) // Apakah punya alur bercabang
+  backgroundMusic String? // URL musik latar default
 
   // TIMESTAMPS
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("novels")
+}
+
+// Model Chapter: Representasi setiap bagian dari cerita
+model Chapter {
+  id            String  @id @default(cuid())
+  title         String
+  content       String  @db.Text
+  chapterNumber Int
+  isStart       Boolean @default(false) // Menandai chapter awal
+  isEnd         Boolean @default(false) // Menandai chapter akhir
+  isPremium     Boolean @default(false)
+  price         Float?
+
+  // RELASI
+  novel    Novel  @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  novelId  String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+
+  // Branching Narrative
+  choicesAsSource       Choice[] @relation("ChoiceSource") // Pilihan yang berasal dari chapter ini
+  choicesThatLeadToThis Choice[] @relation("ChoiceTarget") // Pilihan dari chapter lain yang mengarah ke sini
+
+  // Multimedia
+  backgroundMusic  String?
+  customBackground String?
+  soundEffects     String[]
+  purchases        Purchase[]
+  readingProgress  ReadingProgress[]
+
+  // TIMESTAMPS
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("chapters")
+}
+
+model Choice {
+  id            String  @id @default(cuid())
+  text          String // Teks pilihan, e.g., "Ambil pedang"
+  sourceChapter Chapter @relation("ChoiceSource", fields: [chapterId], references: [id], onDelete: Cascade)
+  chapterId     String
+  nextChapter   Chapter @relation("ChoiceTarget", fields: [nextChapterId], references: [id], onDelete: Cascade)
+  nextChapterId String
+
+  @@map("choices")
 }
 
 // Model Purchase: Transaksi pembelian
@@ -117,6 +159,8 @@ model Purchase {
   userId    String
   novel     Novel?   @relation(fields: [novelId], references: [id])
   novelId   String? // Bisa beli novel utuh atau item spesifik
+  chapter   Chapter? @relation(fields: [chapterId], references: [id])
+  chapterId String?
 
   // TIMESTAMPS
   createdAt DateTime @default(now())
@@ -125,16 +169,18 @@ model Purchase {
   @@map("purchases")
 }
 
-//PATH reading progress
+// Model ReadingProgress: Menyimpan progres baca per user
 model ReadingProgress {
-  id               String   @id @default(cuid())
-  userId           String
-  novelId          String
-//Menyimpan state dari cerita Ink dalam format JSON
-inkState String? @db.Text
+  id        String   @id @default(cuid())
+  userId    String
+  novelId   String
+  chapterId String // Menyimpan ID chapter terakhir yang dibaca
+  progress  Float?   @default(0) // Progres dalam chapter (jika diperlukan)
+  history   Json?    // Menyimpan riwayat pilihan dalam format JSON
 
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   novel Novel @relation(fields: [novelId], references: [id], onDelete: Cascade)
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

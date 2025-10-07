@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use, useCallback } from "react";
+import { useEffect, useState, useCallback, use } from "react";
 import {
   Container,
   Typography,
@@ -12,7 +12,7 @@ import {
   Box,
 } from "@mui/material";
 import type { Novel } from "@prisma/client";
-import StoryMapView from "@/components/novels/StoryMapView";
+import StoryOutlineView from "@/components/novels/StoryOutlineView";
 
 interface IATPageProps {
   params: {
@@ -29,10 +29,14 @@ export default function IATPage({ params }: IATPageProps) {
   const fetchNovel = useCallback(async () => {
     setIsLoadingData(true);
     try {
-      // Ambil data novel, termasuk inkScript
-      // Tambahkan cache-busting untuk memastikan data selalu segar setelah update
+      // Ambil data novel, termasuk semua chapternya. Kita perlu menyertakan relasi chapters.
+      // Gunakan opsi { cache: 'no-store' } untuk memastikan data selalu segar.
       const response = await fetch(
-        `/api/novels/${novelId}?_=${new Date().getTime()}`
+        `/api/novels/${novelId}?includeChapters=true`,
+        {
+          // Tambahkan query param
+          cache: "no-store",
+        }
       );
       if (!response.ok) throw new Error("Gagal memuat data novel.");
       const data = await response.json();
@@ -94,9 +98,8 @@ export default function IATPage({ params }: IATPageProps) {
           position: "relative",
         }}
       >
-        <StoryMapView
-          novelId={novelData.id}
-          initialInkScript={novelData.inkScript || ""}
+        <StoryOutlineView
+          novel={novelData}
           onUpdate={fetchNovel} // Pass fungsi fetchNovel untuk re-fetch data
         />
       </Paper>

@@ -1,14 +1,17 @@
-import { PrismaClient } from "@prisma/client"; // Atau dari '@app/generated/prisma' jika Anda menggunakan output custom
+// lib/prisma.ts
+import { PrismaClient } from "@prisma/client";
 
 declare global {
+  // allow global `var` declarations
   // eslint-disable-next-line no-var
   var prisma: PrismaClient | undefined;
 }
 
+// This pattern prevents creating new connections to the database on every hot-reload.
 const prisma =
-  global.prisma ||
+  global.prisma ??
   new PrismaClient({
-    // Optional: log: ["query", "info", "warn", "error"],
+    log: process.env.NODE_ENV === "production" ? [] : ["query"],
   });
 
 if (process.env.NODE_ENV !== "production") {
@@ -16,4 +19,3 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export default prisma;
-
